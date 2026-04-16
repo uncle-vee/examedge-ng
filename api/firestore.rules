@@ -1,0 +1,66 @@
+// ============================================================
+//  firestore.rules — ExamEdge NG Firestore Security Rules
+//  Paste this into Firebase Console → Firestore → Rules tab
+// ============================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper: is the requesting user the admin? ─────────────
+    function isAdmin() {
+      return request.auth != null &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // ── Helper: is the user approved? ────────────────────────
+    function isApproved() {
+      return request.auth != null &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "approved";
+    }
+
+    // ── Users collection ──────────────────────────────────────
+    match /users/{uid} {
+      // Anyone signed in can read their OWN record
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      // Admin can read ALL user records
+      allow read: if isAdmin();
+
+      // A user can CREATE their own record on first sign-in
+      allow create: if request.auth != null && request.auth.uid == uid;
+
+      // A user can update ONLY their own paymentRef field
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paymentRef"]);
+
+      // Admin can update ANY user record (approve, reject, revoke)
+      allow update: if isAdmin();
+
+      // Nobody can delete user records
+      allow delete: if false;
+    }
+
+    // ── Compendiums collection ────────────────────────────────
+    // Stores generated compendiums per user per subject
+    match /compendiums/{docId} {
+      // Approved users can read their own compendiums
+      allow read: if request.auth != null
+                  && isApproved()
+                  && resource.data.uid == request.auth.uid;
+
+      // Admin can read all
+      allow read: if isAdmin();
+
+      // Approved users can create compendiums for themselves
+      allow create: if request.auth != null
+                    && isApproved()
+                    && request.resource.data.uid == request.auth.uid;
+
+      // No updates or deletes from client
+      allow update, delete: if false;
+    }
+  }
+}
