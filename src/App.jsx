@@ -200,7 +200,7 @@ function ReferenceManager({ onRefsChange }) {
         📎 References {refCount > 0 ? `(${refCount} added)` : ""}
       </button>
       {open && (
-        <div style={{ position: "absolute", top: "110%", left: 0, background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: 20, boxShadow: "0 12px 40px rgba(0,132,61,0.15)", zIndex: 200, width: 380, maxWidth: "90vw" }}>
+        <div style={{ position: "fixed", bottom: 90, right: 24, background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: 20, boxShadow: "0 12px 40px rgba(0,132,61,0.25)", zIndex: 500, width: 400, maxWidth: "calc(100vw - 48px)", maxHeight: "70vh", overflowY: "auto" }}>
           <h4 style={{ color: "#005a29", marginBottom: 16, fontSize: "0.95rem", fontWeight: 700 }}>📚 Add Reference Materials</h4>
 
           {/* PDF Upload */}
@@ -588,7 +588,6 @@ export default function App() {
             <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => setScreen("dashboard")}>← Back</button>
             <button style={{ background: "#00843D", color: "white", border: "none", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => generateCompendium(selectedSubject)}>🔄 Regenerate</button>
             <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => window.print()}>🖨️ Print / PDF</button>
-            <ReferenceManager onRefsChange={setRefs} />
           </div>
           {sections.map((sec, i) => (
             <div key={i} style={{ background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: "28px 32px", marginBottom: 20, boxShadow: "0 4px 24px rgba(0,132,61,0.10)" }}>
@@ -618,15 +617,12 @@ export default function App() {
       <Topbar />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
         <div style={{ background: "linear-gradient(135deg, #005a29, #006b30)", borderRadius: 20, padding: "36px 40px", color: "white", marginBottom: 40, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, position: "relative", overflow: "hidden" }}>
-          <img src="/logo.png" alt="" style={{ position: "absolute", right: 20, top: "50%", transform: "translateY(-50%)", height: 100, width: 100, objectFit: "contain", opacity: 0.15 }} />
+
           <div>
             <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.8rem", marginBottom: 6 }}>Welcome, {user?.displayName?.split(" ")[0]}! 👋</h2>
             <p style={{ color: "rgba(255,255,255,0.75)" }}>Select a subject and let AI generate your personalized exam compendium.</p>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
-            <div style={{ background: "#FFD700", color: "#005a29", borderRadius: 999, padding: "8px 22px", fontWeight: 700, fontSize: "0.85rem" }}>✅ Access Approved</div>
-            <ReferenceManager onRefsChange={setRefs} />
-          </div>
+          <div style={{ background: "#FFD700", color: "#005a29", borderRadius: 999, padding: "8px 22px", fontWeight: 700, fontSize: "0.85rem" }}>✅ Access Approved</div>
         </div>
         {refs.referenceUrls.filter(u => u).length > 0 || refs.pdfBase64 ? (
           <div style={{ background: "#e6f4ec", border: "1px solid #d1fae5", borderRadius: 10, padding: "10px 16px", marginBottom: 24, fontSize: "0.85rem", color: "#005a29", display: "flex", gap: 12, flexWrap: "wrap" }}>
