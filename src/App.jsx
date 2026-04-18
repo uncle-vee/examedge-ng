@@ -1,5 +1,5 @@
 // ============================================================
-//  App.jsx — ExamEdge NG  |  Rebuilt with direct Firebase auth
+//  App.jsx — ExamEdge NG | Logo + Chatbot + PDF/URL References
 // ============================================================
 
 import { useState, useEffect, useRef } from "react";
@@ -13,7 +13,6 @@ import {
   collection, onSnapshot, addDoc, serverTimestamp,
 } from "firebase/firestore";
 
-// ── Firebase init ─────────────────────────────────────────────
 const firebaseConfig = {
   apiKey:            process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain:        process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -75,14 +74,176 @@ function parseSections(text) {
     if (startIdx === -1) return;
     const nextDef = SECTION_DEFS.slice(i + 1).find(d => text.indexOf(d.emoji, startIdx + 1) !== -1);
     const endIdx  = nextDef ? text.indexOf(nextDef.emoji, startIdx + 1) : text.length;
-    const lines   = text.slice(startIdx, endIdx).split("\n");
-    const content = lines.slice(1).join("\n").trim();
+    const content = text.slice(startIdx, endIdx).split("\n").slice(1).join("\n").trim();
     results.push({ ...def, content });
   });
   if (results.length === 0) results.push({ key: "full", emoji: "📋", label: "Full Compendium", content: text });
   return results;
 }
 
+// ── Chatbot Component ─────────────────────────────────────────
+function Chatbot({ subject, onClose }) {
+  const [messages,    setMessages]    = useState([{ role: "assistant", content: `Hi! I'm ExamBot 🤖 — your AI study assistant for ExamEdge NG.\n\nI can help you with:\n• Any subject questions for WAEC & NECO\n• Explaining difficult topics\n• Solving past questions step by step\n• Navigating the app\n\nWhat would you like to know? 🎯` }]);
+  const [input,       setInput]       = useState("");
+  const [loading,     setLoading]     = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg = { role: "user", content: input.trim() };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
+          subject: subject?.name,
+        }),
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: "assistant", content: data.reply || "Sorry, I could not process that. Please try again." }]);
+    } catch {
+      setMessages(prev => [...prev, { role: "assistant", content: "Connection error. Please try again." }]);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", bottom: 90, right: 24, width: 380, maxWidth: "calc(100vw - 48px)", background: "white", borderRadius: 20, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", zIndex: 1000, display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #d1fae5", maxHeight: "70vh" }}>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #005a29, #006b30)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 36, height: 36, background: "#FFD700", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem" }}>🤖</div>
+          <div>
+            <div style={{ color: "white", fontWeight: 700, fontSize: "0.95rem" }}>ExamBot</div>
+            <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.75rem" }}>AI Study Assistant • Always Online</div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "white", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: "1rem" }}>✕</button>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12, minHeight: 200 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+            <div style={{
+              maxWidth: "85%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+              background: m.role === "user" ? "#00843D" : "#f0fdf4",
+              color: m.role === "user" ? "white" : "#1a1a1a",
+              fontSize: "0.88rem", lineHeight: 1.6, whiteSpace: "pre-wrap",
+              border: m.role === "assistant" ? "1px solid #d1fae5" : "none",
+            }}>{m.content}</div>
+          </div>
+        ))}
+        {loading && (
+          <div style={{ display: "flex", gap: 6, padding: "10px 14px", background: "#f0fdf4", borderRadius: "16px 16px 16px 4px", width: "fit-content", border: "1px solid #d1fae5" }}>
+            {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, background: "#00843D", borderRadius: "50%", animation: `bounce 1s infinite ${i * 0.15}s` }} />)}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: "12px 16px", borderTop: "1px solid #f0fdf4", display: "flex", gap: 8 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+          placeholder="Ask me anything about your exams…"
+          style={{ flex: 1, border: "1.5px solid #d1fae5", borderRadius: 10, padding: "10px 14px", fontSize: "0.88rem", outline: "none", fontFamily: "sans-serif" }}
+        />
+        <button onClick={sendMessage} disabled={loading || !input.trim()} style={{ background: "#00843D", color: "white", border: "none", borderRadius: 10, padding: "10px 16px", cursor: "pointer", fontSize: "1rem", opacity: loading || !input.trim() ? 0.5 : 1 }}>➤</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Reference Manager Component ───────────────────────────────
+function ReferenceManager({ onRefsChange }) {
+  const [urls,       setUrls]       = useState([""]);
+  const [pdfFile,    setPdfFile]    = useState(null);
+  const [pdfBase64,  setPdfBase64]  = useState("");
+  const [open,       setOpen]       = useState(false);
+
+  const addUrl    = () => setUrls(prev => [...prev, ""]);
+  const updateUrl = (i, val) => setUrls(prev => prev.map((u, idx) => idx === i ? val : u));
+  const removeUrl = (i) => setUrls(prev => prev.filter((_, idx) => idx !== i));
+
+  const handlePdf = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPdfFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1];
+      setPdfBase64(base64);
+      onRefsChange({ pdfBase64: base64, pdfName: file.name, referenceUrls: urls.filter(u => u.trim()) });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const applyRefs = () => {
+    onRefsChange({ pdfBase64, pdfName: pdfFile?.name || "", referenceUrls: urls.filter(u => u.trim()) });
+    setOpen(false);
+  };
+
+  const refCount = (pdfFile ? 1 : 0) + urls.filter(u => u.trim()).length;
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(!open)} style={{ background: refCount > 0 ? "#FFD700" : "white", color: refCount > 0 ? "#005a29" : "#00843D", border: "1.5px solid #00843D", borderRadius: 10, padding: "10px 18px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+        📎 References {refCount > 0 ? `(${refCount} added)` : ""}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "110%", left: 0, background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: 20, boxShadow: "0 12px 40px rgba(0,132,61,0.15)", zIndex: 200, width: 380, maxWidth: "90vw" }}>
+          <h4 style={{ color: "#005a29", marginBottom: 16, fontSize: "0.95rem", fontWeight: 700 }}>📚 Add Reference Materials</h4>
+
+          {/* PDF Upload */}
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "#005a29", marginBottom: 8 }}>📄 Upload PDF Document</p>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, background: "#f0fdf4", border: "1.5px dashed #00843D", borderRadius: 10, padding: "12px 16px", cursor: "pointer" }}>
+              <span style={{ fontSize: "1.5rem" }}>📂</span>
+              <div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#005a29" }}>{pdfFile ? pdfFile.name : "Click to upload PDF"}</div>
+                <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>Past question papers, textbook excerpts, notes</div>
+              </div>
+              <input type="file" accept=".pdf" onChange={handlePdf} style={{ display: "none" }} />
+            </label>
+          </div>
+
+          {/* URL References */}
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "#005a29", marginBottom: 8 }}>🔗 Add Website URLs</p>
+            {urls.map((url, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input
+                  value={url}
+                  onChange={e => updateUrl(i, e.target.value)}
+                  placeholder="https://example.com/resource"
+                  style={{ flex: 1, border: "1.5px solid #d1fae5", borderRadius: 8, padding: "8px 12px", fontSize: "0.82rem", outline: "none" }}
+                />
+                {urls.length > 1 && <button onClick={() => removeUrl(i)} style={{ background: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 8, padding: "0 10px", cursor: "pointer" }}>✕</button>}
+              </div>
+            ))}
+            <button onClick={addUrl} style={{ background: "transparent", border: "1px dashed #00843D", color: "#00843D", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer", width: "100%" }}>+ Add another URL</button>
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={applyRefs} style={{ flex: 1, background: "#00843D", color: "white", border: "none", borderRadius: 10, padding: "10px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }}>✅ Apply References</button>
+            <button onClick={() => setOpen(false)} style={{ background: "transparent", border: "1.5px solid #d1fae5", color: "#6b7280", borderRadius: 10, padding: "10px 14px", fontSize: "0.88rem", cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────
 export default function App() {
   const [user,            setUser]            = useState(null);
   const [userRecord,      setUserRecord]      = useState(null);
@@ -97,10 +258,21 @@ export default function App() {
   const [paymentRef,      setPaymentRef]      = useState("");
   const [paymentSaved,    setPaymentSaved]    = useState(false);
   const [adminUsers,      setAdminUsers]      = useState([]);
+  const [chatOpen,        setChatOpen]        = useState(false);
+  const [refs,            setRefs]            = useState({ pdfBase64: "", pdfName: "", referenceUrls: [] });
 
   useEffect(() => {
     const styleTag = document.createElement("style");
-    styleTag.textContent = `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: sans-serif; }`;
+    styleTag.textContent = `
+      @keyframes spin    { to { transform: rotate(360deg); } }
+      @keyframes bounce  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+      @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: sans-serif; }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: #f0fdf4; }
+      ::-webkit-scrollbar-thumb { background: #00843D; border-radius: 3px; }
+    `;
     document.head.appendChild(styleTag);
     return () => document.head.removeChild(styleTag);
   }, []);
@@ -126,12 +298,7 @@ export default function App() {
     const snap    = await getDoc(ref);
     let record;
     if (!snap.exists()) {
-      record = {
-        uid: firebaseUser.uid, name: firebaseUser.displayName || "Student",
-        email: firebaseUser.email, photoURL: firebaseUser.photoURL || "",
-        status: isAdmin ? "approved" : "pending", isAdmin, paymentRef: "",
-        createdAt: serverTimestamp(),
-      };
+      record = { uid: firebaseUser.uid, name: firebaseUser.displayName || "Student", email: firebaseUser.email, photoURL: firebaseUser.photoURL || "", status: isAdmin ? "approved" : "pending", isAdmin, paymentRef: "", createdAt: serverTimestamp() };
       await setDoc(ref, record);
     } else {
       record = snap.data();
@@ -141,7 +308,7 @@ export default function App() {
       }
     }
     setUserRecord(record);
-    if (isAdmin)                      setScreen("admin");
+    if (isAdmin)                           setScreen("admin");
     else if (record.status === "approved") setScreen("dashboard");
     else if (record.status === "rejected") setScreen("rejected");
     else                                   setScreen("pending");
@@ -159,18 +326,11 @@ export default function App() {
 
   const handleSignIn = async () => {
     setAuthError("");
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error(err);
-      if (err.code !== "auth/popup-closed-by-user") setAuthError("Sign-in failed. Please try again.");
-    }
+    try { await signInWithPopup(auth, provider); }
+    catch (err) { if (err.code !== "auth/popup-closed-by-user") setAuthError("Sign-in failed. Please try again."); }
   };
 
-  const handleSignOut = async () => {
-    await signOut(auth);
-    setScreen("landing");
-  };
+  const handleSignOut = async () => { await signOut(auth); setScreen("landing"); };
 
   const updateUserStatus = async (uid, status) => {
     await updateDoc(doc(db, "users", uid), { status, updatedAt: serverTimestamp() });
@@ -186,7 +346,11 @@ export default function App() {
       setLoadingStep(i + 1);
     }
     try {
-      const res  = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subjectName: subject.name }) });
+      const res  = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subjectName: subject.name, pdfBase64: refs.pdfBase64, pdfName: refs.pdfName, referenceUrls: refs.referenceUrls }),
+      });
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
       const text = data.compendium || "";
@@ -208,43 +372,68 @@ export default function App() {
     setPaymentSaved(true);
   };
 
-  const Topbar = () => (
-    <div style={{ background: "#005a29", padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 16px rgba(0,0,0,0.18)" }}>
-      <div style={{ fontFamily: "Georgia, serif", fontSize: "1.45rem", fontWeight: 900, color: "#FFD700", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
-        onClick={() => setScreen(userRecord?.isAdmin ? "admin" : "dashboard")}>
-        Exam<span style={{ color: "#FFD700" }}>Edge</span> <span style={{ color: "white" }}>NG</span>
-        {userRecord?.isAdmin && <span style={{ fontSize: "0.65rem", background: "rgba(255,215,0,0.2)", padding: "2px 10px", borderRadius: 999, fontFamily: "sans-serif" }}>Admin</span>}
+  // ── Logo component ─────────────────────────────────────────
+  const Logo = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+      onClick={() => setScreen(userRecord?.isAdmin ? "admin" : user ? "dashboard" : "landing")}>
+      <img src="/logo.png" alt="ExamEdge NG" style={{ height: 44, width: 44, objectFit: "contain" }} />
+      <div style={{ fontFamily: "Georgia, serif", fontSize: "1.3rem", fontWeight: 900, color: "#FFD700", lineHeight: 1.1 }}>
+        Exam<span style={{ color: "#FFD700" }}>Edge</span> <span style={{ color: "white", fontSize: "1rem" }}>NG</span>
+        {userRecord?.isAdmin && <span style={{ display: "block", fontSize: "0.6rem", background: "rgba(255,215,0,0.2)", padding: "1px 8px", borderRadius: 999, fontFamily: "sans-serif", color: "#FFD700", letterSpacing: 1 }}>ADMIN</span>}
       </div>
+    </div>
+  );
+
+  // ── Topbar ─────────────────────────────────────────────────
+  const Topbar = () => (
+    <div style={{ background: "#005a29", padding: "0 24px", height: 68, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 16px rgba(0,0,0,0.18)" }}>
+      <Logo />
       {user && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ background: "rgba(255,215,0,0.12)", border: "1px solid rgba(255,215,0,0.3)", borderRadius: 999, padding: "6px 16px", fontSize: "0.82rem", color: "#FFD700", display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#FFD700", color: "#005a29", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.75rem", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ background: "rgba(255,215,0,0.12)", border: "1px solid rgba(255,215,0,0.3)", borderRadius: 999, padding: "5px 14px", fontSize: "0.82rem", color: "#FFD700", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#FFD700", color: "#005a29", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.75rem", overflow: "hidden" }}>
               {user.photoURL ? <img src={user.photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : user.displayName?.[0] ?? "U"}
             </div>
-            {user.displayName?.split(" ")[0]}
+            <span style={{ display: "none" }}>{user.displayName?.split(" ")[0]}</span>
           </div>
+          <button onClick={() => setChatOpen(c => !c)} style={{ background: chatOpen ? "#FFD700" : "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.4)", color: chatOpen ? "#005a29" : "#FFD700", borderRadius: 8, padding: "6px 12px", fontSize: "0.8rem", cursor: "pointer" }} title="Open ExamBot">🤖 ExamBot</button>
           <button onClick={handleSignOut} style={{ background: "transparent", border: "1px solid rgba(255,215,0,0.4)", color: "#FFD700", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer" }}>Sign Out</button>
         </div>
       )}
     </div>
   );
 
+  // ── Floating Chat Button ────────────────────────────────────
+  const FloatingChat = () => (
+    <>
+      <button onClick={() => setChatOpen(c => !c)}
+        style={{ position: "fixed", bottom: 24, right: 24, width: 58, height: 58, borderRadius: "50%", background: "linear-gradient(135deg, #00843D, #005a29)", color: "white", border: "none", fontSize: "1.5rem", cursor: "pointer", boxShadow: "0 4px 20px rgba(0,132,61,0.4)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
+        title="Open ExamBot">
+        {chatOpen ? "✕" : "🤖"}
+      </button>
+      {chatOpen && <Chatbot subject={selectedSubject} onClose={() => setChatOpen(false)} />}
+    </>
+  );
+
   if (authLoading) return (
-    <div style={{ minHeight: "100vh", background: "#005a29", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <div style={{ width: 72, height: 72, border: "5px solid rgba(255,215,0,0.2)", borderTop: "5px solid #FFD700", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-      <p style={{ color: "rgba(255,255,255,0.6)" }}>Loading ExamEdge NG…</p>
+    <div style={{ minHeight: "100vh", background: "#005a29", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+      <img src="/logo.png" alt="ExamEdge NG" style={{ height: 80, width: 80, objectFit: "contain", animation: "spin 3s linear infinite" }} />
+      <p style={{ color: "rgba(255,255,255,0.6)", fontFamily: "sans-serif" }}>Loading ExamEdge NG…</p>
     </div>
   );
 
+  // ── Landing ─────────────────────────────────────────────────
   if (screen === "landing") return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #005a29 0%, #006b30 50%, #004d22 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 24px" }}>
-      <div style={{ background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.4)", color: "#FFD700", borderRadius: 999, padding: "6px 20px", fontSize: "0.78rem", fontWeight: 600, letterSpacing: 2, marginBottom: 28 }}>
+      <img src="/logo.png" alt="ExamEdge NG" style={{ height: 120, width: 120, objectFit: "contain", marginBottom: 20, filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.3))" }} />
+      <div style={{ background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.4)", color: "#FFD700", borderRadius: 999, padding: "6px 20px", fontSize: "0.78rem", fontWeight: 600, letterSpacing: 2, marginBottom: 20 }}>
         🇳🇬 NIGERIA'S #1 EXAM INTELLIGENCE PLATFORM
       </div>
-      <h1 style={{ fontFamily: "Georgia, serif", fontSize: "clamp(2.8rem, 7vw, 5rem)", fontWeight: 900, color: "white", lineHeight: 1.05, marginBottom: 12 }}>
+      <h1 style={{ fontFamily: "Georgia, serif", fontSize: "clamp(2.5rem, 7vw, 5rem)", fontWeight: 900, color: "white", lineHeight: 1.05, marginBottom: 12 }}>
         Exam<span style={{ color: "#FFD700" }}>Edge</span> NG
       </h1>
-      <p style={{ color: "rgba(255,255,255,0.72)", fontSize: "1.1rem", maxWidth: 520, lineHeight: 1.7, marginBottom: 48 }}>
+      <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "1rem", maxWidth: 480, lineHeight: 1.7, marginBottom: 16 }}>THE AI ADVANTAGE</p>
+      <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.95rem", maxWidth: 520, lineHeight: 1.7, marginBottom: 48 }}>
         37 years of WAEC &amp; NECO past questions — analyzed, decoded, and compressed into your personal A1 study compendium.
       </p>
       <div style={{ display: "flex", gap: 40, marginBottom: 52, flexWrap: "wrap", justifyContent: "center" }}>
@@ -269,10 +458,11 @@ export default function App() {
     </div>
   );
 
+  // ── Pending ─────────────────────────────────────────────────
   if (screen === "pending") return (
     <div style={{ minHeight: "100vh", background: "#F9F7F0" }}>
       <Topbar />
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)", padding: "48px 24px", textAlign: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 68px)", padding: "48px 24px", textAlign: "center" }}>
         <div style={{ width: 96, height: 96, background: "#e6f4ec", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.8rem", marginBottom: 28 }}>⏳</div>
         <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.9rem", color: "#005a29", marginBottom: 14 }}>Access Request Received</h2>
         <p style={{ color: "#6b7280", maxWidth: 420, lineHeight: 1.7, marginBottom: 10 }}>Welcome, <strong>{user?.displayName}</strong>! Your account is pending admin approval.</p>
@@ -288,13 +478,15 @@ export default function App() {
         )}
         <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", marginTop: 28 }} onClick={handleSignOut}>← Sign Out</button>
       </div>
+      <FloatingChat />
     </div>
   );
 
+  // ── Rejected ────────────────────────────────────────────────
   if (screen === "rejected") return (
     <div style={{ minHeight: "100vh", background: "#F9F7F0" }}>
       <Topbar />
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)", padding: 48, textAlign: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 68px)", padding: 48, textAlign: "center" }}>
         <div style={{ fontSize: "3rem", marginBottom: 20 }}>❌</div>
         <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.9rem", color: "#005a29", marginBottom: 14 }}>Access Not Granted</h2>
         <p style={{ color: "#6b7280" }}>Your request was not approved. Please contact the administrator.</p>
@@ -303,6 +495,7 @@ export default function App() {
     </div>
   );
 
+  // ── Admin ────────────────────────────────────────────────────
   if (screen === "admin") {
     const counts = { pending: adminUsers.filter(u => u.status === "pending").length, approved: adminUsers.filter(u => u.status === "approved").length, rejected: adminUsers.filter(u => u.status === "rejected").length };
     return (
@@ -312,7 +505,7 @@ export default function App() {
           <h1 style={{ fontFamily: "Georgia, serif", fontSize: "2rem", color: "#005a29", marginBottom: 6 }}>Admin Dashboard</h1>
           <p style={{ color: "#6b7280", marginBottom: 32 }}>Manage student registrations and grant access in real-time</p>
           <div style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap" }}>
-            {[["Pending", counts.pending, "#854d0e", "#fef9c3"],["Approved", counts.approved, "#166534", "#dcfce7"],["Rejected", counts.rejected, "#991b1b", "#fee2e2"],["Total", adminUsers.length, "#1e3a5f", "#eff6ff"]].map(([l,c,col,bg]) => (
+            {[["Pending",counts.pending,"#854d0e","#fef9c3"],["Approved",counts.approved,"#166534","#dcfce7"],["Rejected",counts.rejected,"#991b1b","#fee2e2"],["Total",adminUsers.length,"#1e3a5f","#eff6ff"]].map(([l,c,col,bg]) => (
               <div key={l} style={{ background: bg, borderRadius: 12, padding: "16px 24px", flex: 1, minWidth: 120, textAlign: "center" }}>
                 <div style={{ fontSize: "2rem", fontFamily: "Georgia, serif", fontWeight: 900, color: col }}>{c}</div>
                 <div style={{ fontSize: "0.78rem", color: col, fontWeight: 600 }}>{l}</div>
@@ -332,16 +525,16 @@ export default function App() {
                     <td style={{ padding: "14px 20px", fontFamily: "monospace", fontSize: "0.82rem" }}>{u.paymentRef || "—"}</td>
                     <td style={{ padding: "14px 20px", color: "#6b7280", fontSize: "0.82rem" }}>{u.createdAt?.toDate?.()?.toLocaleDateString("en-GB") ?? "—"}</td>
                     <td style={{ padding: "14px 20px" }}>
-                      <span style={{ borderRadius: 999, padding: "4px 14px", fontSize: "0.78rem", fontWeight: 600, background: u.status === "approved" ? "#dcfce7" : u.status === "pending" ? "#fef9c3" : "#fee2e2", color: u.status === "approved" ? "#166534" : u.status === "pending" ? "#854d0e" : "#991b1b" }}>
-                        {u.status === "approved" ? "✅ Approved" : u.status === "pending" ? "⏳ Pending" : "❌ Rejected"}
+                      <span style={{ borderRadius: 999, padding: "4px 14px", fontSize: "0.78rem", fontWeight: 600, background: u.status==="approved"?"#dcfce7":u.status==="pending"?"#fef9c3":"#fee2e2", color: u.status==="approved"?"#166534":u.status==="pending"?"#854d0e":"#991b1b" }}>
+                        {u.status==="approved"?"✅ Approved":u.status==="pending"?"⏳ Pending":"❌ Rejected"}
                       </span>
                     </td>
                     <td style={{ padding: "14px 20px" }}>
                       {u.isAdmin ? <span style={{ color: "#FFD700", fontWeight: 700 }}>👑 Admin</span> : (
                         <>
-                          {u.status === "pending" && <><button style={{ background: "#00843D", color: "white", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer", marginRight: 6 }} onClick={() => updateUserStatus(u.id, "approved")}>✅ Approve</button><button style={{ background: "#ef4444", color: "white", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => updateUserStatus(u.id, "rejected")}>❌ Reject</button></>}
-                          {u.status === "approved" && <button style={{ background: "#f59e0b", color: "white", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => updateUserStatus(u.id, "rejected")}>🚫 Revoke</button>}
-                          {u.status === "rejected" && <button style={{ background: "#00843D", color: "white", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => updateUserStatus(u.id, "approved")}>↩️ Re-Approve</button>}
+                          {u.status==="pending"&&<><button style={{ background:"#00843D",color:"white",border:"none",borderRadius:8,padding:"6px 14px",fontSize:"0.8rem",cursor:"pointer",marginRight:6 }} onClick={()=>updateUserStatus(u.id,"approved")}>✅ Approve</button><button style={{ background:"#ef4444",color:"white",border:"none",borderRadius:8,padding:"6px 14px",fontSize:"0.8rem",cursor:"pointer" }} onClick={()=>updateUserStatus(u.id,"rejected")}>❌ Reject</button></>}
+                          {u.status==="approved"&&<button style={{ background:"#f59e0b",color:"white",border:"none",borderRadius:8,padding:"6px 14px",fontSize:"0.8rem",cursor:"pointer" }} onClick={()=>updateUserStatus(u.id,"rejected")}>🚫 Revoke</button>}
+                          {u.status==="rejected"&&<button style={{ background:"#00843D",color:"white",border:"none",borderRadius:8,padding:"6px 14px",fontSize:"0.8rem",cursor:"pointer" }} onClick={()=>updateUserStatus(u.id,"approved")}>↩️ Re-Approve</button>}
                         </>
                       )}
                     </td>
@@ -351,15 +544,21 @@ export default function App() {
             </table>
           </div>
         </div>
+        <FloatingChat />
       </div>
     );
   }
 
+  // ── Generating ───────────────────────────────────────────────
   if (screen === "generating") return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,42,18,0.95)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 999, textAlign: "center", padding: 24 }}>
-      <div style={{ width: 72, height: 72, border: "5px solid rgba(255,215,0,0.2)", borderTop: "5px solid #FFD700", borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: 28 }} />
+      <img src="/logo.png" alt="" style={{ height: 80, width: 80, objectFit: "contain", marginBottom: 20, animation: "spin 3s linear infinite" }} />
       <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.6rem", color: "white", marginBottom: 8 }}>Analyzing Past Questions</h2>
-      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.9rem", maxWidth: 380, textAlign: "center" }}>AI is scanning 37 years of WAEC &amp; NECO data for <strong style={{ color: "#FFD700" }}>{selectedSubject?.name}</strong>…</p>
+      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.9rem", maxWidth: 380 }}>
+        AI is scanning 37 years of WAEC &amp; NECO data for <strong style={{ color: "#FFD700" }}>{selectedSubject?.name}</strong>…
+        {refs.pdfBase64 && <span style={{ display: "block", color: "#86efac", marginTop: 4 }}>📄 PDF reference included</span>}
+        {refs.referenceUrls.length > 0 && <span style={{ display: "block", color: "#86efac", marginTop: 4 }}>🔗 {refs.referenceUrls.length} URL{refs.referenceUrls.length > 1 ? "s" : ""} included</span>}
+      </p>
       <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 6 }}>
         {LOADING_STEPS.map((step, i) => (
           <div key={i} style={{ fontSize: "0.88rem", color: loadingStep > i ? "#86efac" : loadingStep === i ? "#FFD700" : "rgba(255,255,255,0.4)", fontWeight: loadingStep === i ? 600 : 400 }}>
@@ -370,21 +569,26 @@ export default function App() {
     </div>
   );
 
+  // ── Compendium ───────────────────────────────────────────────
   if (screen === "compendium" && compendium) {
     const sections = parseSections(compendium);
     return (
       <div style={{ minHeight: "100vh", background: "#F9F7F0" }}>
         <Topbar />
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "48px 24px" }}>
-          <div style={{ background: "linear-gradient(135deg, #005a29, #006b30)", borderRadius: 20, padding: "36px 40px", color: "white", marginBottom: 32 }}>
-            <div style={{ display: "inline-block", background: "#FFD700", color: "#005a29", borderRadius: 999, padding: "5px 16px", fontSize: "0.78rem", fontWeight: 700, marginBottom: 14 }}>📋 AI-Generated Compendium • 1988–2025</div>
-            <h1 style={{ fontFamily: "Georgia, serif", fontSize: "2rem", marginBottom: 6 }}>{selectedSubject?.icon} {selectedSubject?.name}</h1>
-            <p style={{ color: "rgba(255,255,255,0.75)" }}>WAEC &amp; NECO Pattern Analysis — {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+          <div style={{ background: "linear-gradient(135deg, #005a29, #006b30)", borderRadius: 20, padding: "36px 40px", color: "white", marginBottom: 32, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <img src="/logo.png" alt="" style={{ height: 64, width: 64, objectFit: "contain" }} />
+            <div>
+              <div style={{ display: "inline-block", background: "#FFD700", color: "#005a29", borderRadius: 999, padding: "5px 16px", fontSize: "0.78rem", fontWeight: 700, marginBottom: 10 }}>📋 AI-Generated Compendium • 1988–2025</div>
+              <h1 style={{ fontFamily: "Georgia, serif", fontSize: "2rem", marginBottom: 6 }}>{selectedSubject?.icon} {selectedSubject?.name}</h1>
+              <p style={{ color: "rgba(255,255,255,0.75)" }}>WAEC &amp; NECO Pattern Analysis — {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 12, marginBottom: 32, flexWrap: "wrap" }}>
-            <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => setScreen("dashboard")}>← Back to Subjects</button>
+          <div style={{ display: "flex", gap: 12, marginBottom: 32, flexWrap: "wrap", alignItems: "center" }}>
+            <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => setScreen("dashboard")}>← Back</button>
             <button style={{ background: "#00843D", color: "white", border: "none", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => generateCompendium(selectedSubject)}>🔄 Regenerate</button>
-            <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => window.print()}>🖨️ Print / Save PDF</button>
+            <button style={{ background: "transparent", border: "1.5px solid #00843D", color: "#00843D", borderRadius: 10, padding: "10px 22px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer" }} onClick={() => window.print()}>🖨️ Print / PDF</button>
+            <ReferenceManager onRefsChange={setRefs} />
           </div>
           {sections.map((sec, i) => (
             <div key={i} style={{ background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: "28px 32px", marginBottom: 20, boxShadow: "0 4px 24px rgba(0,132,61,0.10)" }}>
@@ -393,7 +597,7 @@ export default function App() {
                 {sec.label}
               </h3>
               {sec.key === "lastminute" ? (
-                <div style={{ background: "linear-gradient(135deg, #fefce8, #fef9c3)", border: "1.5px solid #FFD700", borderRadius: 12, padding: "20px 24px" }}>
+                <div style={{ background: "linear-gradient(135deg,#fefce8,#fef9c3)", border: "1.5px solid #FFD700", borderRadius: 12, padding: "20px 24px" }}>
                   <p style={{ color: "#854d0e", fontSize: "0.88rem", fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>⚡ Priority Focus — 48-Hour Countdown</p>
                   <p style={{ color: "#78350f", fontSize: "0.9rem", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{sec.content}</p>
                 </div>
@@ -403,26 +607,41 @@ export default function App() {
             </div>
           ))}
         </div>
+        <FloatingChat />
       </div>
     );
   }
 
+  // ── Student Dashboard ─────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: "#F9F7F0" }}>
       <Topbar />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
-        <div style={{ background: "linear-gradient(135deg, #005a29, #006b30)", borderRadius: 20, padding: "36px 40px", color: "white", marginBottom: 40, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24 }}>
+        <div style={{ background: "linear-gradient(135deg, #005a29, #006b30)", borderRadius: 20, padding: "36px 40px", color: "white", marginBottom: 40, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, position: "relative", overflow: "hidden" }}>
+          <img src="/logo.png" alt="" style={{ position: "absolute", right: 20, top: "50%", transform: "translateY(-50%)", height: 100, width: 100, objectFit: "contain", opacity: 0.15 }} />
           <div>
             <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.8rem", marginBottom: 6 }}>Welcome, {user?.displayName?.split(" ")[0]}! 👋</h2>
-            <p style={{ color: "rgba(255,255,255,0.75)" }}>Select a subject to generate your AI-powered exam compendium.</p>
+            <p style={{ color: "rgba(255,255,255,0.75)" }}>Select a subject and let AI generate your personalized exam compendium.</p>
           </div>
-          <div style={{ background: "#FFD700", color: "#005a29", borderRadius: 999, padding: "8px 22px", fontWeight: 700, fontSize: "0.85rem" }}>✅ Access Approved</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+            <div style={{ background: "#FFD700", color: "#005a29", borderRadius: 999, padding: "8px 22px", fontWeight: 700, fontSize: "0.85rem" }}>✅ Access Approved</div>
+            <ReferenceManager onRefsChange={setRefs} />
+          </div>
         </div>
+        {refs.referenceUrls.filter(u => u).length > 0 || refs.pdfBase64 ? (
+          <div style={{ background: "#e6f4ec", border: "1px solid #d1fae5", borderRadius: 10, padding: "10px 16px", marginBottom: 24, fontSize: "0.85rem", color: "#005a29", display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 600 }}>📎 Active references:</span>
+            {refs.pdfBase64 && <span>📄 {refs.pdfName}</span>}
+            {refs.referenceUrls.filter(u => u).map((u, i) => <span key={i}>🔗 {u.length > 40 ? u.slice(0, 40) + "…" : u}</span>)}
+          </div>
+        ) : null}
         {genError && <div style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 10, padding: "12px 20px", marginBottom: 24 }}>{genError}</div>}
         <p style={{ fontSize: "0.78rem", fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#00843D", marginBottom: 18 }}>📚 Choose a Subject</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18, marginBottom: 48 }}>
           {SUBJECTS.map(sub => (
-            <div key={sub.id} style={{ background: "white", border: "1.5px solid #d1fae5", borderRadius: 16, padding: "26px 20px", display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 4px 24px rgba(0,132,61,0.10)" }}>
+            <div key={sub.id} style={{ background: "white", border: "1.5px solid #d1fae5", borderRadius: 16, padding: "26px 20px", display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 4px 24px rgba(0,132,61,0.10)", transition: "transform 0.2s" }}
+              onMouseOver={e => e.currentTarget.style.transform = "translateY(-4px)"}
+              onMouseOut={e => e.currentTarget.style.transform = "translateY(0)"}>
               <div style={{ fontSize: "2.2rem" }}>{sub.icon}</div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{sub.name}</div>
@@ -449,6 +668,7 @@ export default function App() {
           </div>
         </>}
       </div>
+      <FloatingChat />
     </div>
   );
 }
