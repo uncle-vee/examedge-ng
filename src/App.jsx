@@ -196,11 +196,11 @@ function ReferenceManager({ onRefsChange }) {
 
   return (
     <div style={{ position: "relative" }}>
-      <button onClick={() => setOpen(!open)} style={{ background: refCount > 0 ? "#FFD700" : "white", color: refCount > 0 ? "#005a29" : "#00843D", border: "1.5px solid #00843D", borderRadius: 10, padding: "10px 18px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-        📎 References {refCount > 0 ? `(${refCount} added)` : ""}
+      <button onClick={() => setOpen(!open)} style={{ background: refCount > 0 ? "#FFD700" : "#005a29", color: refCount > 0 ? "#005a29" : "white", border: "none", borderRadius: 999, padding: "10px 18px", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(0,90,41,0.35)", whiteSpace: "nowrap" }}>
+        📎 References {refCount > 0 ? `(${refCount})` : ""}
       </button>
       {open && (
-        <div style={{ position: "fixed", bottom: 90, right: 24, background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: 20, boxShadow: "0 12px 40px rgba(0,132,61,0.25)", zIndex: 500, width: 400, maxWidth: "calc(100vw - 48px)", maxHeight: "70vh", overflowY: "auto" }}>
+        <div style={{ position: "fixed", bottom: 160, right: 24, background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: 20, boxShadow: "0 12px 40px rgba(0,132,61,0.25)", zIndex: 500, width: 400, maxWidth: "calc(100vw - 48px)", maxHeight: "60vh", overflowY: "auto" }}>
           <h4 style={{ color: "#005a29", marginBottom: 16, fontSize: "0.95rem", fontWeight: 700 }}>📚 Add Reference Materials</h4>
 
           {/* PDF Upload */}
@@ -406,6 +406,12 @@ export default function App() {
   // ── Floating Chat Button ────────────────────────────────────
   const FloatingChat = () => (
     <>
+      {/* Reference Manager Floating Button */}
+      <div style={{ position: "fixed", bottom: 96, right: 24, zIndex: 998 }}>
+        <ReferenceManager onRefsChange={setRefs} />
+      </div>
+
+      {/* ExamBot Floating Button */}
       <button onClick={() => setChatOpen(c => !c)}
         style={{ position: "fixed", bottom: 24, right: 24, width: 58, height: 58, borderRadius: "50%", background: "linear-gradient(135deg, #00843D, #005a29)", color: "white", border: "none", fontSize: "1.5rem", cursor: "pointer", boxShadow: "0 4px 20px rgba(0,132,61,0.4)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
         title="Open ExamBot">
