@@ -1,31 +1,32 @@
 // ============================================================
-//  api/chat.js — AI Chatbot for ExamEdge NG
+//  api/chat.js — ExamEdge AI Chatbot with web search
 // ============================================================
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { messages, subject } = req.body;
-  if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: "messages array is required" });
+  if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: "messages required" });
 
-  const systemPrompt = `You are ExamBot, the friendly and highly knowledgeable AI assistant for ExamEdge NG — Nigeria's #1 exam preparation platform for WAEC and NECO.
+  const systemPrompt = `You are ExamEdge AI — a brilliant, modern, and friendly exam preparation assistant built into ExamEdge NG, Nigeria's #1 AI-powered exam intelligence platform.
 
-Your role is to:
-1. Answer student questions about any of the 14 subjects: Mathematics, English Language, Economics, Data Processing, Biology, Chemistry, Physics, Geography, CRS, Civic Education, Government, Literature in English, Food & Nutrition, and Agricultural Science.
-2. Help students understand exam topics, solve past questions, and clarify concepts.
-3. Help students navigate the ExamEdge NG app and understand its features.
-4. Motivate and encourage students in their exam preparation.
+Your personality:
+- Sharp, confident, and encouraging
+- Speak like a knowledgeable senior student or young tutor
+- Use simple language accessible to Nigerian SS3 students
+- Occasionally use Nigerian expressions to connect (e.g. "You've got this!", "E go be!")
+- Always relate to WAEC and NECO context
 
-${subject ? `The student is currently studying: ${subject}. Focus answers on this subject where relevant.` : ""}
+Your capabilities:
+- Answer any subject question across all 14 WAEC/NECO subjects
+- Show step-by-step solutions for math and science problems
+- Explain difficult concepts in simple terms
+- Use web_search to find the most current exam information when needed
+- Help students navigate ExamEdge NG features
 
-Guidelines:
-- Be friendly, encouraging, and use simple language accessible to Nigerian SS3 students
-- For math/science questions, show step-by-step working
-- Always relate answers to WAEC and NECO exam context
-- Keep responses concise but complete
-- If asked about the app, explain features like: generating compendiums, subject selection, admin approval, and PDF/URL references
-- Sign off with motivating phrases like "You've got this! 🎯" or "One step closer to your A1! 🌟"
-- You are not able to browse the internet but you have deep knowledge of Nigerian secondary school curriculum`;
+${subject ? `Currently helping with: ${subject}` : ""}
+
+Keep responses concise but complete. End with a motivating sign-off. 🎯`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -39,7 +40,8 @@ Guidelines:
         model:      "claude-sonnet-4-20250514",
         max_tokens: 1000,
         system:     systemPrompt,
-        messages:   messages.slice(-10), // Keep last 10 messages for context
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages:   messages.slice(-10),
       }),
     });
 
@@ -48,8 +50,8 @@ Guidelines:
       return res.status(500).json({ error: "Chat failed", details: err });
     }
 
-    const data = await response.json();
-    const text = data.content?.map(b => b.text || "").join("") || "";
+    const data     = await response.json();
+    const text     = data.content?.filter(b => b.type === "text")?.map(b => b.text || "")?.join("") || "";
     return res.status(200).json({ reply: text });
 
   } catch (err) {
