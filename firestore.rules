@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isApproved() {
+      return request.auth != null &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "approved";
+    }
+
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAdmin();
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paymentRef"]);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /compendiums/{docId} {
+      allow read: if request.auth != null && isApproved() && resource.data.uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow create: if request.auth != null && isApproved() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /adminRefs/{docId} {
+      allow read: if request.auth != null && isApproved();
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

@@ -1,6 +1,8 @@
 // ============================================================
-//  api/chat.js — ExamEdge AI Chatbot with web search
+//  api/chat.js — ExamEdge AI Chatbot (stable, no web search)
 // ============================================================
+
+export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -8,25 +10,30 @@ export default async function handler(req, res) {
   const { messages, subject } = req.body;
   if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: "messages required" });
 
-  const systemPrompt = `You are ExamEdge AI — a brilliant, modern, and friendly exam preparation assistant built into ExamEdge NG, Nigeria's #1 AI-powered exam intelligence platform.
+  const systemPrompt = `You are ExamEdge AI — a brilliant, modern, and friendly exam preparation assistant built into ExamEdge NG, Nigeria's #1 AI-powered exam intelligence platform for WAEC and NECO.
 
 Your personality:
-- Sharp, confident, and encouraging
-- Speak like a knowledgeable senior student or young tutor
+- Sharp, confident, and genuinely encouraging
+- Speak like a knowledgeable senior student or young tutor — warm but intelligent
 - Use simple language accessible to Nigerian SS3 students
-- Occasionally use Nigerian expressions to connect (e.g. "You've got this!", "E go be!")
-- Always relate to WAEC and NECO context
+- Occasionally use light Nigerian expressions to connect (e.g. "You've got this!", "E go be!", "No dulling!")
+- Always relate answers to WAEC and NECO exam context
 
 Your capabilities:
-- Answer any subject question across all 14 WAEC/NECO subjects
-- Show step-by-step solutions for math and science problems
-- Explain difficult concepts in simple terms
-- Use web_search to find the most current exam information when needed
+- Answer any question across all 14 WAEC/NECO subjects: Mathematics, English Language, Economics, Data Processing, Biology, Chemistry, Physics, Geography, CRS, Civic Education, Government, Literature in English, Food & Nutrition, Agricultural Science
+- Show clear step-by-step solutions for math and science problems
+- Explain difficult concepts using simple analogies
+- Give exam tips, time management advice, and strategies
+- Help students understand how to answer different question types
 - Help students navigate ExamEdge NG features
 
-${subject ? `Currently helping with: ${subject}` : ""}
+${subject ? `The student is currently focused on: ${subject}. Prioritize this subject in your responses where relevant.` : ""}
 
-Keep responses concise but complete. End with a motivating sign-off. 🎯`;
+Response style:
+- Keep answers concise but complete — no unnecessary padding
+- Use numbered steps for procedures and calculations
+- Bold key terms where helpful
+- Always end with a short motivating sign-off 🎯`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -40,7 +47,6 @@ Keep responses concise but complete. End with a motivating sign-off. 🎯`;
         model:      "claude-sonnet-4-20250514",
         max_tokens: 1000,
         system:     systemPrompt,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages:   messages.slice(-10),
       }),
     });
@@ -50,8 +56,8 @@ Keep responses concise but complete. End with a motivating sign-off. 🎯`;
       return res.status(500).json({ error: "Chat failed", details: err });
     }
 
-    const data     = await response.json();
-    const text     = data.content?.filter(b => b.type === "text")?.map(b => b.text || "")?.join("") || "";
+    const data = await response.json();
+    const text = data.content?.filter(b => b.type === "text")?.map(b => b.text || "")?.join("") || "";
     return res.status(200).json({ reply: text });
 
   } catch (err) {
