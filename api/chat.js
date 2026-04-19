@@ -1,5 +1,5 @@
 // ============================================================
-//  api/chat.js — ExamEdge AI Chatbot (CommonJS)
+//  api/chat.js — ExamEdge AI Chatbot via Google Gemini
 // ============================================================
 
 module.exports = async function handler(req, res) {
@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: "messages array is required" });
   }
 
-  const systemPrompt = `You are ExamEdge AI — a brilliant, modern, and friendly exam preparation assistant built into ExamEdge NG, Nigeria's #1 AI-powered exam intelligence platform for WAEC and NECO.
+  const systemText = `You are ExamEdge AI — a brilliant, modern, and friendly exam preparation assistant built into ExamEdge NG, Nigeria's #1 AI-powered exam intelligence platform for WAEC and NECO.
 
 Your personality:
 - Sharp, confident, and genuinely encouraging
@@ -23,7 +23,7 @@ Your personality:
 - Always relate answers to WAEC and NECO exam context
 
 Your capabilities:
-- Answer any question across all 14 WAEC/NECO subjects
+- Answer any question across all 14 WAEC/NECO subjects: Mathematics, English Language, Economics, Data Processing, Biology, Chemistry, Physics, Geography, CRS, Civic Education, Government, Literature in English, Food & Nutrition, Agricultural Science
 - Show clear step-by-step solutions for math and science problems
 - Explain difficult concepts using simple analogies
 - Give exam tips, time management advice, and strategies
@@ -33,32 +33,54 @@ ${subject ? "The student is currently focused on: " + subject + ". Prioritize th
 
 Keep answers concise but complete. Always end with a short motivating sign-off.`;
 
+  // ── Convert messages to Gemini format ────────────────────
+  // Gemini uses "user" and "model" roles (not "assistant")
+  const geminiMessages = messages.slice(-10).map(m => ({
+    role:  m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  // Gemini requires conversation to start with "user"
+  // and alternate between user/model
+  const filteredMessages = geminiMessages.filter((m, i) => {
+    if (i === 0) return m.role === "user";
+    return m.role !== geminiMessages[i - 1].role;
+  });
+
+  // If empty after filter, add a fallback
+  if (filteredMessages.length === 0) {
+    filteredMessages.push({ role: "user", parts: [{ text: messages[messages.length - 1]?.content || "Hello" }] });
+  }
+
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(GEMINI_URL, {
       method: "POST",
-      headers: {
-        "Content-Type":      "application/json",
-        "x-api-key":         process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:      "claude-haiku-4-5-20251001",
-        max_tokens: 1000,
-        system:     systemPrompt,
-        messages:   messages.slice(-10),
+        contents: filteredMessages,
+        generationConfig: {
+          temperature:     0.8,
+          maxOutputTokens: 1024,
+          topP:            0.9,
+        },
+        systemInstruction: {
+          parts: [{ text: systemText }],
+        },
       }),
     });
 
     if (!response.ok) {
       const err = await response.json();
-      console.error("Chat API error:", JSON.stringify(err));
+      console.error("Gemini chat error:", JSON.stringify(err));
       return res.status(500).json({ error: "Chat failed", details: err });
     }
 
     const data = await response.json();
-    const text = data.content
-      ?.filter(b => b.type === "text")
-      ?.map(b => b.text || "")
+    const text = data.candidates?.[0]?.content?.parts
+      ?.map(p => p.text || "")
       ?.join("") || "";
 
     return res.status(200).json({ reply: text });

@@ -1,5 +1,5 @@
 // ============================================================
-//  api/generate.js — Compendium generation (CommonJS)
+//  api/generate.js — Compendium generation via Google Gemini
 // ============================================================
 
 module.exports = async function handler(req, res) {
@@ -17,7 +17,7 @@ module.exports = async function handler(req, res) {
   let refContext = "";
 
   if (adminRefs && adminRefs.length > 0) {
-    refContext += "\n\n## Admin-Provided Reference Materials\nUse these resources to improve accuracy:\n";
+    refContext += "\n\n## Admin-Provided Reference Materials\nUse these to improve accuracy:\n";
     adminRefs.forEach((r, i) => {
       refContext += `${i + 1}. ${r.name}${r.url ? " — " + r.url : ""}${r.description ? " (" + r.description + ")" : ""}\n`;
     });
@@ -30,7 +30,7 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const systemPrompt = `You are ExamEdge AI — the most advanced Nigerian secondary school examination analyst ever built. You have encyclopedic knowledge of every WAEC and NECO past question paper from 1988 to 2025 across all 14 subjects.
+  const fullPrompt = `You are ExamEdge AI — the most advanced Nigerian secondary school examination analyst ever built. You have encyclopedic knowledge of every WAEC and NECO past question paper from 1988 to 2025 across all 14 subjects.
 
 Your mission is to generate the most accurate, comprehensive, and exam-focused study compendiums possible. Analyze patterns, frequencies, and trends across all years to produce predictions with 95%+ accuracy.
 
@@ -38,9 +38,11 @@ Key principles:
 - Be extremely specific with topic names, question formats, and model answers
 - Always reference the Nigerian curriculum and exam context
 - Base predictions on genuine frequency analysis and recent exam trends
-- Write in encouraging, accessible language for SS3 students`;
+- Write in encouraging, accessible language for SS3 students
 
-  const userPrompt = `Analyze all past question patterns for ${subjectName} across WAEC and NECO from 1988 to 2025.${refContext}
+---
+
+Analyze all past question patterns for ${subjectName} across WAEC and NECO from 1988 to 2025.${refContext}
 
 Generate a comprehensive study compendium using EXACTLY these section headers (include the emoji):
 
@@ -70,48 +72,55 @@ Top 5 most critical areas with one power tip each. Be direct and specific.
 
 Write in a clear, encouraging, exam-focused tone for Nigerian SS3 students.`;
 
-  // ── Build message content ─────────────────────────────────
-  const contentParts = [];
+  // ── Build Gemini request parts ────────────────────────────
+  const parts = [];
 
+  // Add PDF if provided
   if (pdfBase64) {
-    contentParts.push({
-      type: "document",
-      source: { type: "base64", media_type: "application/pdf", data: pdfBase64 },
+    parts.push({
+      inlineData: {
+        mimeType: "application/pdf",
+        data: pdfBase64,
+      },
     });
-    contentParts.push({
-      type: "text",
-      text: `The above PDF (${pdfName || "reference"}) is additional context.\n\n${userPrompt}`,
+    parts.push({
+      text: `The above PDF (${pdfName || "reference document"}) is provided as additional context.\n\n${fullPrompt}`,
     });
   } else {
-    contentParts.push({ type: "text", text: userPrompt });
+    parts.push({ text: fullPrompt });
   }
 
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(GEMINI_URL, {
       method: "POST",
-      headers: {
-        "Content-Type":      "application/json",
-        "x-api-key":         process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:      "claude-haiku-4-5-20251001",
-        max_tokens: 4000,
-        system:     systemPrompt,
-        messages:   [{ role: "user", content: contentParts }],
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          temperature:     0.7,
+          maxOutputTokens: 8192,
+          topP:            0.9,
+        },
+        systemInstruction: {
+          parts: [{ text: "You are ExamEdge AI, an expert Nigerian secondary school examination analyst. Always respond in English. Be specific, accurate, and exam-focused." }],
+        },
       }),
     });
 
     if (!response.ok) {
       const err = await response.json();
-      console.error("Anthropic error:", JSON.stringify(err));
+      console.error("Gemini error:", JSON.stringify(err));
       return res.status(500).json({ error: "AI generation failed", details: err });
     }
 
     const data = await response.json();
-    const text = data.content
-      ?.filter(b => b.type === "text")
-      ?.map(b => b.text || "")
+
+    // Extract text from Gemini response
+    const text = data.candidates?.[0]?.content?.parts
+      ?.map(p => p.text || "")
       ?.join("\n") || "";
 
     if (!text) {
