@@ -1,5 +1,6 @@
 // ============================================================
-//  api/generate.js — Compendium generation via Google Gemini
+//  api/generate.js — Compendium generation via Groq (Free)
+//  Model: llama-3.3-70b-versatile (free, fast, powerful)
 // ============================================================
 
 module.exports = async function handler(req, res) {
@@ -30,7 +31,7 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const fullPrompt = `You are ExamEdge AI — the most advanced Nigerian secondary school examination analyst ever built. You have encyclopedic knowledge of every WAEC and NECO past question paper from 1988 to 2025 across all 14 subjects.
+  const systemPrompt = `You are ExamEdge AI — the most advanced Nigerian secondary school examination analyst ever built. You have encyclopedic knowledge of every WAEC and NECO past question paper from 1988 to 2025 across all 14 subjects.
 
 Your mission is to generate the most accurate, comprehensive, and exam-focused study compendiums possible. Analyze patterns, frequencies, and trends across all years to produce predictions with 95%+ accuracy.
 
@@ -39,10 +40,9 @@ Key principles:
 - Always reference the Nigerian curriculum and exam context
 - Base predictions on genuine frequency analysis and recent exam trends
 - Write in encouraging, accessible language for SS3 students
+- Never truncate your response — always complete all 8 sections fully`;
 
----
-
-Analyze all past question patterns for ${subjectName} across WAEC and NECO from 1988 to 2025.${refContext}
+  const userPrompt = `Analyze all past question patterns for ${subjectName} across WAEC and NECO from 1988 to 2025.${refContext}
 
 Generate a comprehensive study compendium using EXACTLY these section headers (include the emoji):
 
@@ -72,56 +72,32 @@ Top 5 most critical areas with one power tip each. Be direct and specific.
 
 Write in a clear, encouraging, exam-focused tone for Nigerian SS3 students.`;
 
-  // ── Build Gemini request parts ────────────────────────────
-  const parts = [];
-
-  // Add PDF if provided
-  if (pdfBase64) {
-    parts.push({
-      inlineData: {
-        mimeType: "application/pdf",
-        data: pdfBase64,
-      },
-    });
-    parts.push({
-      text: `The above PDF (${pdfName || "reference document"}) is provided as additional context.\n\n${fullPrompt}`,
-    });
-  } else {
-    parts.push({ text: fullPrompt });
-  }
-
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
   try {
-    const response = await fetch(GEMINI_URL, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      },
       body: JSON.stringify({
-        contents: [{ role: "user", parts }],
-        generationConfig: {
-          temperature:     0.7,
-          maxOutputTokens: 8192,
-          topP:            0.9,
-        },
-        systemInstruction: {
-          parts: [{ text: "You are ExamEdge AI, an expert Nigerian secondary school examination analyst. Always respond in English. Be specific, accurate, and exam-focused." }],
-        },
+        model:       "llama-3.3-70b-versatile",
+        max_tokens:  8000,
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user",   content: userPrompt   },
+        ],
       }),
     });
 
     if (!response.ok) {
       const err = await response.json();
-      console.error("Gemini error:", JSON.stringify(err));
+      console.error("Groq error:", JSON.stringify(err));
       return res.status(500).json({ error: "AI generation failed", details: err });
     }
 
     const data = await response.json();
-
-    // Extract text from Gemini response
-    const text = data.candidates?.[0]?.content?.parts
-      ?.map(p => p.text || "")
-      ?.join("\n") || "";
+    const text = data.choices?.[0]?.message?.content || "";
 
     if (!text) {
       return res.status(500).json({ error: "No content returned from AI" });
