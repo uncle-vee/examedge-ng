@@ -101,7 +101,7 @@ const BotIcon = ({ size = 24, color = "white" }) => (
 
 // ── Chatbot Component ─────────────────────────────────────────
 function Chatbot({ subject, onClose }) {
-  const [messages, setMessages] = useState([{ role: "assistant", content: `Hey! I'm ExamEdge AI ✦\n\nI can help you with:\n• Any WAEC & NECO subject questions\n• Step-by-step problem solving\n• Exam tips and strategies\n• App navigation\n\nWhat's on your mind? 🎯` }]);
+  const [messages, setMessages] = useState([{ role: "assistant", content: `Hey! I'm Ariel AI ✦ — your intelligent study companion.\n\nI can help with any subject from JSS1 to SS3:\n• Mathematics, English, Sciences, Arts\n• Homework, assignments and classwork\n• WAEC, NECO, JAMB preparation\n• Step-by-step problem solving\n\nWhat class are you in and what do you need help with today? 🎯` }]);
   const [input,   setInput]   = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
@@ -131,12 +131,12 @@ function Chatbot({ subject, onClose }) {
           </div>
           <div>
             <div style={{ color: "white", fontWeight: 700, fontSize: "0.92rem", display: "flex", alignItems: "center", gap: 6 }}>
-              ExamEdge AI
+              Ariel AI
               <span style={{ background: "#FFD700", color: "#001a0d", fontSize: "0.58rem", padding: "1px 6px", borderRadius: 999, fontWeight: 800 }}>AI</span>
             </div>
             <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.7rem", display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 6, height: 6, background: "#4ade80", borderRadius: "50%", display: "inline-block" }}></span>
-              Online
+              JSS1 — SS3 · All subjects
             </div>
           </div>
         </div>
@@ -560,7 +560,7 @@ export default function App() {
             {user.displayName?.split(" ")[0]}
           </div>
           <button onClick={() => setChatOpen(c => !c)} style={{ background: chatOpen ? "#FFD700" : "rgba(255,215,0,0.1)", border: "1px solid rgba(255,215,0,0.25)", color: chatOpen ? "#001a0d" : "#FFD700", borderRadius: 10, padding: "7px 12px", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-            <BotIcon size={15} color={chatOpen ? "#001a0d" : "#FFD700"} /> AI Chat
+            <BotIcon size={15} color={chatOpen ? "#001a0d" : "#FFD700"} /> Ariel AI
           </button>
           <button onClick={handleSignOut} style={{ background: "transparent", border: "1px solid rgba(255,215,0,0.2)", color: "#FFD700", borderRadius: 8, padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer" }}>Sign Out</button>
         </div>
