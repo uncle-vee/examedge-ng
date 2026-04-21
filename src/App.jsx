@@ -1,5 +1,6 @@
 // ============================================================
-//  App.jsx — ExamEdge NG | Fixed Admin Refs + PDF + Stable Gen
+//  App.jsx — ExamEdge NG | Full Student Companion | JSS1–SS3
+//  Features: Class dashboards, Ariel AI with upload, GET PROMOTED
 // ============================================================
 
 import { useState, useEffect, useRef } from "react";
@@ -31,7 +32,37 @@ provider.setCustomParameters({ prompt: "select_account" });
 
 const ADMIN_EMAIL = "Veekthormichael@gmail.com";
 
-const SUBJECTS = [
+// ── Class levels ──────────────────────────────────────────────
+const CLASS_LEVELS = [
+  { level: "JSS1", label: "JSS 1", sub: "Junior Secondary 1", color: "#3b82f6", group: "junior" },
+  { level: "JSS2", label: "JSS 2", sub: "Junior Secondary 2", color: "#3b82f6", group: "junior" },
+  { level: "JSS3", label: "JSS 3", sub: "Junior Secondary 3", color: "#3b82f6", group: "junior" },
+  { level: "SS1",  label: "SS 1",  sub: "Senior Secondary 1", color: "#8b5cf6", group: "senior" },
+  { level: "SS2",  label: "SS 2",  sub: "Senior Secondary 2", color: "#8b5cf6", group: "senior" },
+  { level: "SS3",  label: "SS 3",  sub: "WAEC · NECO · JAMB", color: "#00843D", group: "ss3"    },
+];
+
+const NEXT_CLASS = { JSS1: "JSS2", JSS2: "JSS3", JSS3: "SS1", SS1: "SS2", SS2: "SS3", SS3: null };
+
+// ── Subjects by class group ───────────────────────────────────
+const JUNIOR_SUBJECTS = [
+  { id: "eng_j",    name: "English Language",    icon: "📖" },
+  { id: "maths_j",  name: "Mathematics",         icon: "📐" },
+  { id: "bsc",      name: "Basic Science",       icon: "🔬" },
+  { id: "btech",    name: "Basic Technology",    icon: "⚙️" },
+  { id: "civic_j",  name: "Civic Education",     icon: "🏛️" },
+  { id: "sst",      name: "Social Studies",      icon: "🌍" },
+  { id: "cca",      name: "Cultural & Creative Arts", icon: "🎨" },
+  { id: "comp_j",   name: "Computer Studies",    icon: "💻" },
+  { id: "french_j", name: "French",              icon: "🇫🇷" },
+  { id: "agric_j",  name: "Agricultural Science",icon: "🌾" },
+  { id: "home_j",   name: "Home Economics",      icon: "🏠" },
+  { id: "phe_j",    name: "Physical Education",  icon: "⚽" },
+  { id: "crs_j",    name: "C.R.S / I.R.S",       icon: "✝️" },
+  { id: "bus_j",    name: "Business Studies",    icon: "💼" },
+];
+
+const SENIOR_SUBJECTS = [
   { id: "mathematics",     name: "Mathematics",           icon: "📐" },
   { id: "english",         name: "English Language",      icon: "📖" },
   { id: "economics",       name: "Economics",             icon: "📊" },
@@ -46,6 +77,9 @@ const SUBJECTS = [
   { id: "literature",      name: "Literature in English", icon: "🎭" },
   { id: "food",            name: "Food & Nutrition",      icon: "🥗" },
   { id: "agric",           name: "Agricultural Science",  icon: "🌾" },
+  { id: "commerce",        name: "Commerce",              icon: "🏪" },
+  { id: "accounting",      name: "Accounting",            icon: "📒" },
+  { id: "further_maths",   name: "Further Mathematics",   icon: "➕" },
 ];
 
 const LOADING_STEPS = [
@@ -83,7 +117,7 @@ function parseSections(text) {
   return results;
 }
 
-// ── Modern Bot SVG Icon ───────────────────────────────────────
+// ── Modern Bot SVG ────────────────────────────────────────────
 const BotIcon = ({ size = 24, color = "white" }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
     <rect x="6" y="10" width="20" height="16" rx="4" fill={color} fillOpacity="0.95"/>
@@ -99,32 +133,100 @@ const BotIcon = ({ size = 24, color = "white" }) => (
   </svg>
 );
 
-// ── Chatbot Component ─────────────────────────────────────────
-function Chatbot({ subject, onClose }) {
-  const [messages, setMessages] = useState([{ role: "assistant", content: `Hey! I'm Ariel AI ✦ — your intelligent study companion.\n\nI can help with any subject from JSS1 to SS3:\n• Mathematics, English, Sciences, Arts\n• Homework, assignments and classwork\n• WAEC, NECO, JAMB preparation\n• Step-by-step problem solving\n\nWhat class are you in and what do you need help with today? 🎯` }]);
-  const [input,   setInput]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef(null);
+// ── Ariel AI Chatbot with Upload ──────────────────────────────
+function Chatbot({ subject, classLevel, onClose }) {
+  const [messages, setMessages] = useState([{
+    role: "assistant",
+    content: `Hey! I'm Ariel AI ✦ — your intelligent study companion.\n\nI can help with any subject from JSS1 to SS3:\n• Mathematics, English, Sciences, Arts\n• Homework, assignments and classwork\n• WAEC, NECO, JAMB preparation\n• Step-by-step problem solving\n\nYou can also send me a photo or PDF of your textbook, notes or question — I will read and explain it for you! 📸\n\nWhat class are you in and what do you need help with today? 🎯`,
+  }]);
+  const [input,      setInput]      = useState("");
+  const [loading,    setLoading]    = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadB64,  setUploadB64]  = useState("");
+  const [uploadType, setUploadType] = useState("");
+  const [uploadName, setUploadName] = useState("");
+  const bottomRef  = useRef(null);
+  const fileRef    = useRef(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith("image/");
+    const isPdf   = file.type === "application/pdf";
+
+    if (!isImage && !isPdf) {
+      alert("Please upload an image (JPG, PNG) or PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File must be under 5MB.");
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadName(file.name);
+    setUploadType(isImage ? "image" : "pdf");
+
+    const reader = new FileReader();
+    reader.onload = () => setUploadB64(reader.result.split(",")[1]);
+    reader.readAsDataURL(file);
+  };
+
+  const clearUpload = () => {
+    setUploadFile(null);
+    setUploadB64("");
+    setUploadType("");
+    setUploadName("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const send = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = { role: "user", content: input.trim() };
+    if ((!input.trim() && !uploadFile) || loading) return;
+
+    const userContent = uploadFile
+      ? `${input.trim() || "Please explain what is in this file."} [Uploaded: ${uploadName}]`
+      : input.trim();
+
+    const userMsg = { role: "user", content: userContent };
     setMessages(p => [...p, userMsg]);
     setInput("");
+
+    const currentUploadB64   = uploadB64;
+    const currentUploadType  = uploadType;
+    const currentUploadName  = uploadName;
+    clearUpload();
     setLoading(true);
+
     try {
-      const res  = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })), subject: subject?.name }) });
+      const res  = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages:   [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
+          subject:    subject?.name,
+          classLevel,
+          uploadB64:  currentUploadB64,
+          uploadType: currentUploadType,
+          uploadName: currentUploadName,
+          userText:   input.trim() || "Please explain what is in this file.",
+        }),
+      });
       const data = await res.json();
       setMessages(p => [...p, { role: "assistant", content: data.reply || "Sorry, please try again." }]);
-    } catch { setMessages(p => [...p, { role: "assistant", content: "Connection error. Please try again." }]); }
+    } catch {
+      setMessages(p => [...p, { role: "assistant", content: "Connection error. Please try again." }]);
+    }
     setLoading(false);
   };
 
   return (
-    <div style={{ position: "fixed", bottom: 90, right: 24, width: 380, maxWidth: "calc(100vw - 48px)", background: "white", borderRadius: 24, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", zIndex: 1000, display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #e8f5ee", maxHeight: "72vh" }}>
-      <div style={{ background: "linear-gradient(135deg, #001a0d 0%, #00843D 100%)", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div style={{ position: "fixed", bottom: 90, right: 24, width: 390, maxWidth: "calc(100vw - 48px)", background: "white", borderRadius: 24, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", zIndex: 1000, display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #e8f5ee", maxHeight: "75vh" }}>
+
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg,#001a0d 0%,#00843D 100%)", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 38, height: 38, background: "rgba(255,255,255,0.12)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.18)" }}>
             <BotIcon size={22} color="#FFD700" />
@@ -142,10 +244,16 @@ function Chatbot({ subject, onClose }) {
         </div>
         <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.18)", color: "white", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
       </div>
+
+      {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10, background: "#fafffe", minHeight: 200 }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", gap: 8, alignItems: "flex-end" }}>
-            {m.role === "assistant" && <div style={{ width: 26, height: 26, background: "linear-gradient(135deg,#001a0d,#00843D)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><BotIcon size={15} color="#FFD700" /></div>}
+            {m.role === "assistant" && (
+              <div style={{ width: 26, height: 26, background: "linear-gradient(135deg,#001a0d,#00843D)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <BotIcon size={15} color="#FFD700" />
+              </div>
+            )}
             <div style={{ maxWidth: "82%", padding: "9px 13px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role === "user" ? "linear-gradient(135deg,#00843D,#005a29)" : "white", color: m.role === "user" ? "white" : "#1a1a1a", fontSize: "0.86rem", lineHeight: 1.65, whiteSpace: "pre-wrap", boxShadow: m.role === "user" ? "0 2px 10px rgba(0,132,61,0.25)" : "0 2px 6px rgba(0,0,0,0.05)", border: m.role === "assistant" ? "1px solid #e8f5ee" : "none" }}>
               {m.content}
             </div>
@@ -161,11 +269,30 @@ function Chatbot({ subject, onClose }) {
         )}
         <div ref={bottomRef} />
       </div>
-      <div style={{ padding: "10px 14px", borderTop: "1px solid #f0fdf4", display: "flex", gap: 8, background: "white" }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()} placeholder="Ask anything about your exams…" style={{ flex: 1, border: "1.5px solid #e8f5ee", borderRadius: 12, padding: "10px 14px", fontSize: "0.87rem", outline: "none", background: "#fafffe", fontFamily: "sans-serif" }} />
-        <button onClick={send} disabled={loading || !input.trim()} style={{ background: "linear-gradient(135deg,#00843D,#005a29)", color: "white", border: "none", borderRadius: 12, width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading || !input.trim() ? 0.5 : 1, flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="white" strokeWidth="2" strokeLinecap="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
+
+      {/* Upload preview */}
+      {uploadFile && (
+        <div style={{ background: "#f0fdf4", borderTop: "1px solid #d1fae5", padding: "8px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: "1.2rem" }}>{uploadType === "image" ? "🖼️" : "📄"}</span>
+          <span style={{ fontSize: "0.82rem", color: "#005a29", fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{uploadName}</span>
+          <button onClick={clearUpload} style={{ background: "transparent", border: "none", color: "#991b1b", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700 }}>✕ Remove</button>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #f0fdf4", background: "white" }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()} placeholder="Ask anything or upload a file…" style={{ flex: 1, border: "1.5px solid #e8f5ee", borderRadius: 12, padding: "10px 14px", fontSize: "0.87rem", outline: "none", background: "#fafffe", fontFamily: "sans-serif" }} />
+          <button onClick={send} disabled={loading || (!input.trim() && !uploadFile)} style={{ background: "linear-gradient(135deg,#00843D,#005a29)", color: "white", border: "none", borderRadius: 12, width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading || (!input.trim() && !uploadFile) ? 0.5 : 1, flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="white" strokeWidth="2" strokeLinecap="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>
+        {/* Upload button */}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: "0.78rem", color: "#00843D", fontWeight: 600 }}>
+          <span style={{ fontSize: "1rem" }}>📎</span>
+          Upload photo or PDF for Ariel to analyse
+          <input ref={fileRef} type="file" accept="image/*,.pdf" onChange={handleFileUpload} style={{ display: "none" }} />
+        </label>
       </div>
     </div>
   );
@@ -199,22 +326,18 @@ function ReferenceManager({ onRefsChange }) {
       {open && (
         <div style={{ position: "fixed", bottom: 170, right: 24, background: "white", border: "1px solid #d1fae5", borderRadius: 20, padding: 20, boxShadow: "0 16px 48px rgba(0,132,61,0.2)", zIndex: 600, width: 400, maxWidth: "calc(100vw - 48px)", maxHeight: "65vh", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h4 style={{ color: "#003d1f", fontSize: "0.95rem", fontWeight: 700 }}>📚 Add Your Reference Materials</h4>
+            <h4 style={{ color: "#003d1f", fontSize: "0.95rem", fontWeight: 700 }}>📚 Add Reference Materials for Compendium</h4>
             <button onClick={() => setOpen(false)} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "1rem", color: "#6b7280" }}>✕</button>
           </div>
-
-          {/* PDF Upload */}
           <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#003d1f", marginBottom: 8 }}>📄 Upload a PDF</p>
           <label style={{ display: "flex", alignItems: "center", gap: 10, background: "#f0fdf4", border: "2px dashed #00843D", borderRadius: 12, padding: "14px 16px", cursor: "pointer", marginBottom: 16 }}>
             <span style={{ fontSize: "1.8rem" }}>{pdfFile ? "✅" : "📂"}</span>
             <div>
               <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#003d1f" }}>{pdfFile ? pdfFile.name : "Click to upload PDF"}</div>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>Textbooks, past question booklets, notes</div>
+              <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>Past question papers, textbooks, notes</div>
             </div>
             <input type="file" accept=".pdf" onChange={handlePdf} style={{ display: "none" }} />
           </label>
-
-          {/* URLs */}
           <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#003d1f", marginBottom: 8 }}>🔗 Add Website URLs</p>
           {urls.map((url, i) => (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -223,7 +346,6 @@ function ReferenceManager({ onRefsChange }) {
             </div>
           ))}
           <button onClick={() => setUrls(p => [...p, ""])} style={{ background: "transparent", border: "1px dashed #00843D", color: "#00843D", borderRadius: 8, padding: "7px 14px", fontSize: "0.8rem", cursor: "pointer", width: "100%", marginBottom: 16 }}>+ Add another URL</button>
-
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={applyRefs} style={{ flex: 1, background: "#00843D", color: "white", border: "none", borderRadius: 10, padding: "11px", fontSize: "0.88rem", fontWeight: 700, cursor: "pointer" }}>✅ Apply References</button>
             <button onClick={() => setOpen(false)} style={{ background: "transparent", border: "1.5px solid #e5e7eb", color: "#6b7280", borderRadius: 10, padding: "11px 16px", fontSize: "0.88rem", cursor: "pointer" }}>Cancel</button>
@@ -234,32 +356,27 @@ function ReferenceManager({ onRefsChange }) {
   );
 }
 
-// ── Admin References Panel (saves directly to Firestore) ──────
+// ── Admin References Panel ────────────────────────────────────
 function AdminRefsPanel() {
-  const [refs,     setRefs]     = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
-  const [open,     setOpen]     = useState(false);
-  const [tab,      setTab]      = useState("url"); // "url" | "pdf"
-  const [newName,  setNewName]  = useState("");
-  const [newUrl,   setNewUrl]   = useState("");
-  const [newDesc,  setNewDesc]  = useState("");
-  const [pdfFile,  setPdfFile]  = useState(null);
-  const [pdfB64,   setPdfB64]   = useState("");
-  const [error,    setError]    = useState("");
-  const [success,  setSuccess]  = useState("");
+  const [refs,    setRefs]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [open,    setOpen]    = useState(false);
+  const [tab,     setTab]     = useState("url");
+  const [newName, setNewName] = useState("");
+  const [newUrl,  setNewUrl]  = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfB64,  setPdfB64]  = useState("");
+  const [error,   setError]   = useState("");
+  const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    if (!open) return;
-    fetchRefs();
-  }, [open]);
+  useEffect(() => { if (open) fetchRefs(); }, [open]);
 
   const fetchRefs = async () => {
     setLoading(true);
-    try {
-      const snap = await getDocs(collection(db, "adminRefs"));
-      setRefs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) { setError("Failed to load references."); }
+    try { const snap = await getDocs(collection(db, "adminRefs")); setRefs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }
+    catch { setError("Failed to load."); }
     setLoading(false);
   };
 
@@ -274,132 +391,83 @@ function AdminRefsPanel() {
   };
 
   const saveRef = async () => {
-    if (!newName.trim()) { setError("Please enter a name for this reference."); return; }
+    if (!newName.trim()) { setError("Please enter a name."); return; }
     if (tab === "url" && !newUrl.trim()) { setError("Please enter a URL."); return; }
-    if (tab === "pdf" && !pdfB64) { setError("Please upload a PDF file."); return; }
+    if (tab === "pdf" && !pdfB64) { setError("Please upload a PDF."); return; }
     setError(""); setSaving(true);
     try {
-      const data = {
-        name:        newName.trim(),
-        description: newDesc.trim(),
-        type:        tab,
-        createdAt:   serverTimestamp(),
-      };
-      if (tab === "url")  data.url    = newUrl.trim();
+      const data = { name: newName.trim(), description: newDesc.trim(), type: tab, createdAt: serverTimestamp() };
+      if (tab === "url") data.url = newUrl.trim();
       if (tab === "pdf") { data.pdfBase64 = pdfB64; data.pdfName = pdfFile?.name || "document.pdf"; }
-
       await addDoc(collection(db, "adminRefs"), data);
-      setSuccess(`✅ "${newName.trim()}" saved successfully!`);
+      setSuccess(`✅ "${newName.trim()}" saved!`);
       setNewName(""); setNewUrl(""); setNewDesc(""); setPdfFile(null); setPdfB64("");
       await fetchRefs();
       setTimeout(() => setSuccess(""), 3000);
-    } catch (e) { setError("Failed to save. Please try again."); }
+    } catch { setError("Failed to save. Please try again."); }
     setSaving(false);
   };
 
   const deleteRef = async (id, name) => {
     if (!window.confirm(`Delete "${name}"?`)) return;
     try { await deleteDoc(doc(db, "adminRefs", id)); setRefs(p => p.filter(r => r.id !== id)); }
-    catch (e) { setError("Failed to delete."); }
+    catch { setError("Failed to delete."); }
   };
 
   return (
     <div style={{ marginTop: 36 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.4rem", color: "#003d1f", marginBottom: 4 }}>🌐 Global AI Reference Materials</h2>
-          <p style={{ color: "#6b7280", fontSize: "0.83rem" }}>These references are automatically injected into every student's compendium generation to boost accuracy.</p>
+          <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.4rem", color: "#001a0d", marginBottom: 4 }}>🌐 Global AI Reference Materials</h2>
+          <p style={{ color: "#6b7280", fontSize: "0.83rem" }}>These references are automatically used by the AI for all compendium generations to boost accuracy.</p>
         </div>
-        <button onClick={() => setOpen(!open)} style={{ background: open ? "#003d1f" : "#00843D", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+        <button onClick={() => setOpen(!open)} style={{ background: open ? "#001a0d" : "#00843D", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
           {open ? "▲ Collapse" : "▼ Manage References"} {refs.length > 0 && !open ? `(${refs.length} active)` : ""}
         </button>
       </div>
-
       {open && (
         <div style={{ background: "white", border: "1px solid #d1fae5", borderRadius: 16, padding: 24, boxShadow: "0 4px 24px rgba(0,132,61,0.08)" }}>
-
-          {/* Add New Reference */}
           <div style={{ background: "#f0fdf4", borderRadius: 12, padding: 20, marginBottom: 24 }}>
-            <p style={{ fontWeight: 700, color: "#003d1f", marginBottom: 14, fontSize: "0.92rem" }}>➕ Add New Reference</p>
-
-            {/* Tab selector */}
+            <p style={{ fontWeight: 700, color: "#001a0d", marginBottom: 14, fontSize: "0.92rem" }}>➕ Add New Reference</p>
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
               {[["url","🔗 Website URL"],["pdf","📄 PDF Document"]].map(([t, label]) => (
-                <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: tab === t ? "#003d1f" : "white", color: tab === t ? "white" : "#003d1f", border: `1.5px solid ${tab === t ? "#003d1f" : "#d1fae5"}`, borderRadius: 8, padding: "8px 12px", fontSize: "0.83rem", fontWeight: 700, cursor: "pointer" }}>
-                  {label}
-                </button>
+                <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: tab === t ? "#001a0d" : "white", color: tab === t ? "white" : "#001a0d", border: `1.5px solid ${tab === t ? "#001a0d" : "#d1fae5"}`, borderRadius: 8, padding: "8px 12px", fontSize: "0.83rem", fontWeight: 700, cursor: "pointer" }}>{label}</button>
               ))}
             </div>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Reference name (e.g. WAEC Past Questions 2024)" style={{ border: "1.5px solid #d1fae5", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", outline: "none", width: "100%", fontFamily: "sans-serif" }} />
-
-              {tab === "url" && (
-                <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://waec.org.ng/resources" style={{ border: "1.5px solid #d1fae5", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", outline: "none", width: "100%", fontFamily: "sans-serif" }} />
-              )}
-
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Reference name" style={{ border: "1.5px solid #d1fae5", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", outline: "none", width: "100%", fontFamily: "sans-serif" }} />
+              {tab === "url" && <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://waec.org.ng/resources" style={{ border: "1.5px solid #d1fae5", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", outline: "none", width: "100%", fontFamily: "sans-serif" }} />}
               {tab === "pdf" && (
                 <label style={{ display: "flex", alignItems: "center", gap: 12, background: "white", border: "2px dashed #00843D", borderRadius: 10, padding: "14px 16px", cursor: "pointer" }}>
                   <span style={{ fontSize: "1.8rem" }}>{pdfFile ? "✅" : "📂"}</span>
-                  <div>
-                    <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#003d1f" }}>{pdfFile ? pdfFile.name : "Click to upload PDF (max 4MB)"}</div>
-                    <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>Chief examiner reports, past question booklets, curriculum guides</div>
-                  </div>
+                  <div><div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#001a0d" }}>{pdfFile ? pdfFile.name : "Click to upload PDF (max 4MB)"}</div></div>
                   <input type="file" accept=".pdf" onChange={handlePdf} style={{ display: "none" }} />
                 </label>
               )}
-
-              <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Brief description (optional — e.g. WAEC 2024 Biology past questions)" style={{ border: "1.5px solid #d1fae5", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", outline: "none", width: "100%", fontFamily: "sans-serif" }} />
-
+              <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Brief description (optional)" style={{ border: "1.5px solid #d1fae5", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", outline: "none", width: "100%", fontFamily: "sans-serif" }} />
               {error   && <div style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 8, padding: "10px 14px", fontSize: "0.85rem" }}>❌ {error}</div>}
               {success && <div style={{ background: "#dcfce7", color: "#166534", borderRadius: 8, padding: "10px 14px", fontSize: "0.85rem" }}>{success}</div>}
-
-              <button onClick={saveRef} disabled={saving} style={{ background: saving ? "#6b7280" : "#00843D", color: "white", border: "none", borderRadius: 10, padding: "12px", fontSize: "0.9rem", fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
-                {saving ? "⏳ Saving…" : "✅ Save Reference"}
-              </button>
+              <button onClick={saveRef} disabled={saving} style={{ background: saving ? "#6b7280" : "#00843D", color: "white", border: "none", borderRadius: 10, padding: "12px", fontSize: "0.9rem", fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "⏳ Saving…" : "✅ Save Reference"}</button>
             </div>
           </div>
-
-          {/* Reference List */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <p style={{ fontWeight: 700, color: "#003d1f", fontSize: "0.92rem" }}>📋 Active References ({loading ? "…" : refs.length})</p>
+            <p style={{ fontWeight: 700, color: "#001a0d", fontSize: "0.92rem" }}>📋 Active References ({loading ? "…" : refs.length})</p>
             <button onClick={fetchRefs} style={{ background: "transparent", border: "1px solid #d1fae5", color: "#00843D", borderRadius: 8, padding: "5px 12px", fontSize: "0.78rem", cursor: "pointer" }}>↻ Refresh</button>
           </div>
-
-          {loading ? (
-            <div style={{ textAlign: "center", padding: 24, color: "#6b7280" }}>Loading references…</div>
-          ) : refs.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 24, color: "#6b7280", fontSize: "0.88rem", background: "#f9f9f9", borderRadius: 10 }}>
-              No references added yet.<br/>Add your first reference above to boost AI accuracy.
-            </div>
-          ) : refs.map(r => (
+          {loading ? <div style={{ textAlign: "center", padding: 24, color: "#6b7280" }}>Loading…</div>
+          : refs.length === 0 ? <div style={{ textAlign: "center", padding: 24, color: "#6b7280", fontSize: "0.88rem", background: "#f9f9f9", borderRadius: 10 }}>No references added yet.</div>
+          : refs.map(r => (
             <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 0", borderBottom: "1px solid #f0fdf4" }}>
-              <div style={{ width: 38, height: 38, background: "#e6f4ec", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", flexShrink: 0 }}>
-                {r.type === "pdf" ? "📄" : "🔗"}
-              </div>
+              <div style={{ width: 38, height: 38, background: "#e6f4ec", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", flexShrink: 0 }}>{r.type === "pdf" ? "📄" : "🔗"}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "#1a1a1a" }}>{r.name}</div>
-                {r.url    && <div style={{ fontSize: "0.75rem", color: "#00843D", wordBreak: "break-all", marginTop: 2 }}>{r.url}</div>}
+                <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>{r.name}</div>
+                {r.url     && <div style={{ fontSize: "0.75rem", color: "#00843D", wordBreak: "break-all", marginTop: 2 }}>{r.url}</div>}
                 {r.pdfName && <div style={{ fontSize: "0.75rem", color: "#00843D", marginTop: 2 }}>📄 {r.pdfName}</div>}
                 {r.description && <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 2 }}>{r.description}</div>}
-                <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: 2 }}>Type: {r.type === "pdf" ? "PDF Document" : "Website URL"}</div>
               </div>
               <button onClick={() => deleteRef(r.id, r.name)} style={{ background: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: "0.8rem", cursor: "pointer", flexShrink: 0, fontWeight: 600 }}>Delete</button>
             </div>
           ))}
-
-          {/* Tips */}
-          <div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: 10, padding: "12px 16px", marginTop: 20 }}>
-            <p style={{ fontSize: "0.82rem", color: "#854d0e", fontWeight: 700, marginBottom: 6 }}>💡 Best References for 95%+ Accuracy</p>
-            <p style={{ fontSize: "0.78rem", color: "#92400e", lineHeight: 1.7 }}>
-              Add these for maximum prediction accuracy:<br/>
-              • waec.org.ng — Official WAEC past questions<br/>
-              • neco.gov.ng — Official NECO resources<br/>
-              • nerdc.org.ng — Nigerian curriculum authority<br/>
-              • Upload PDF chief examiner reports per subject<br/>
-              • Upload PDF past question booklets (last 5 years)
-            </p>
-          </div>
         </div>
       )}
     </div>
@@ -424,6 +492,8 @@ export default function App() {
   const [chatOpen,        setChatOpen]        = useState(false);
   const [refs,            setRefs]            = useState({ pdfBase64: "", pdfName: "", referenceUrls: [] });
   const [adminRefs,       setAdminRefs]       = useState([]);
+  const [classLevel,      setClassLevel]      = useState("");
+  const [showPromote,     setShowPromote]     = useState(false);
 
   useEffect(() => {
     const s = document.createElement("style");
@@ -433,21 +503,14 @@ export default function App() {
   }, []);
 
   const loadAdminRefs = async () => {
-    try {
-      const snap = await getDocs(collection(db, "adminRefs"));
-      setAdminRefs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) { console.error("adminRefs load error:", e); }
+    try { const snap = await getDocs(collection(db, "adminRefs")); setAdminRefs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }
+    catch (e) { console.error("adminRefs:", e); }
   };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fu) => {
-      if (fu) {
-        setUser(fu);
-        await loadUserRecord(fu);
-        await loadAdminRefs();
-      } else {
-        setUser(null); setUserRecord(null); setScreen("landing");
-      }
+      if (fu) { setUser(fu); await loadUserRecord(fu); await loadAdminRefs(); }
+      else    { setUser(null); setUserRecord(null); setScreen("landing"); }
       setAuthLoading(false);
     });
     return unsub;
@@ -466,10 +529,12 @@ export default function App() {
       if (isAdmin && record.status !== "approved") { await updateDoc(ref, { status: "approved", isAdmin: true }); record = { ...record, status: "approved", isAdmin: true }; }
     }
     setUserRecord(record);
-    if (isAdmin)                           setScreen("admin");
-    else if (record.status === "approved") setScreen("dashboard");
-    else if (record.status === "rejected") setScreen("rejected");
-    else                                   setScreen("pending");
+    if (record.classLevel) setClassLevel(record.classLevel);
+    if (isAdmin)                                     setScreen("admin");
+    else if (record.status === "approved" && !record.classLevel) setScreen("selectClass");
+    else if (record.status === "approved")           setScreen("dashboard");
+    else if (record.status === "rejected")           setScreen("rejected");
+    else                                             setScreen("pending");
   };
 
   useEffect(() => {
@@ -486,6 +551,13 @@ export default function App() {
   const handleSignOut = async () => { await signOut(auth); setScreen("landing"); };
   const updateStatus  = async (uid, status) => { await updateDoc(doc(db, "users", uid), { status, updatedAt: serverTimestamp() }); };
 
+  const saveClassLevel = async (level) => {
+    setClassLevel(level);
+    if (user) await updateDoc(doc(db, "users", user.uid), { classLevel: level, updatedAt: serverTimestamp() });
+    setShowPromote(false);
+    setScreen("dashboard");
+  };
+
   const savePaymentRef = async () => {
     if (!paymentRef.trim() || !user) return;
     await updateDoc(doc(db, "users", user.uid), { paymentRef: paymentRef.trim() });
@@ -498,45 +570,37 @@ export default function App() {
     setGenError("");
     setLoadingStep(0);
     await loadAdminRefs();
-
     for (let i = 0; i < LOADING_STEPS.length; i++) {
       await new Promise(r => setTimeout(r, 700));
       setLoadingStep(i + 1);
     }
-
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subjectName:   subject.name,
-          pdfBase64:     refs.pdfBase64 || "",
-          pdfName:       refs.pdfName   || "",
-          referenceUrls: refs.referenceUrls || [],
-          adminRefs:     adminRefs.map(r => ({ name: r.name, url: r.url || "", description: r.description || "", type: r.type })),
-        }),
+        body: JSON.stringify({ subjectName: subject.name, pdfBase64: refs.pdfBase64 || "", pdfName: refs.pdfName || "", referenceUrls: refs.referenceUrls || [], adminRefs: adminRefs.map(r => ({ name: r.name, url: r.url || "", description: r.description || "", type: r.type })) }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const text = data.compendium || "";
-      if (!text) throw new Error("Empty response from AI");
-
+      if (!text) throw new Error("Empty response");
       setCompendium(text);
       if (user) await addDoc(collection(db, "compendiums"), { uid: user.uid, subjectId: subject.id, subjectName: subject.name, content: text, createdAt: serverTimestamp() });
       setHistory(prev => prev.find(h => h.id === subject.id) ? prev : [{ ...subject, generatedAt: new Date().toLocaleDateString() }, ...prev]);
       setScreen("compendium");
-
     } catch (err) {
-      console.error("Generation error:", err);
+      console.error(err);
       setGenError(`Generation failed: ${err.message}. Please try again.`);
       setScreen("dashboard");
     }
   };
+
+  // ── Helpers ───────────────────────────────────────────────
+  const classInfo    = CLASS_LEVELS.find(c => c.level === classLevel);
+  const isJunior     = classInfo?.group === "junior";
+  const isSS3        = classLevel === "SS3";
+  const subjects     = isJunior ? JUNIOR_SUBJECTS : SENIOR_SUBJECTS;
+  const nextClass    = NEXT_CLASS[classLevel];
 
   const Logo = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setScreen(userRecord?.isAdmin ? "admin" : user ? "dashboard" : "landing")}>
@@ -576,14 +640,16 @@ export default function App() {
       <button onClick={() => setChatOpen(c => !c)} style={{ position: "fixed", bottom: 24, right: 24, width: 56, height: 56, borderRadius: 14, background: chatOpen ? "#FFD700" : "linear-gradient(135deg,#001a0d,#00843D)", color: chatOpen ? "#001a0d" : "white", border: "none", cursor: "pointer", boxShadow: "0 6px 20px rgba(0,26,13,0.4)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {chatOpen ? <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>✕</span> : <BotIcon size={24} color="white" />}
       </button>
-      {chatOpen && <Chatbot subject={selectedSubject} onClose={() => setChatOpen(false)} />}
+      {chatOpen && <Chatbot subject={selectedSubject} classLevel={classLevel} onClose={() => setChatOpen(false)} />}
     </>
   );
+
+  // ── SCREENS ───────────────────────────────────────────────
 
   if (authLoading) return (
     <div style={{ minHeight: "100vh", background: "#001a0d", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
       <img src="/logo.png" alt="" style={{ height: 80, width: 80, objectFit: "contain", animation: "spin 3s linear infinite" }} />
-      <p style={{ color: "rgba(255,255,255,0.5)", fontFamily: "sans-serif" }}>Loading ExamEdge NG…</p>
+      <p style={{ color: "rgba(255,255,255,0.5)" }}>Loading ExamEdge NG…</p>
     </div>
   );
 
@@ -593,9 +659,11 @@ export default function App() {
       <div style={{ background: "rgba(255,215,0,0.1)", border: "1px solid rgba(255,215,0,0.3)", color: "#FFD700", borderRadius: 999, padding: "6px 20px", fontSize: "0.78rem", fontWeight: 700, letterSpacing: 2, marginBottom: 20 }}>🇳🇬 NIGERIA'S #1 EXAM INTELLIGENCE PLATFORM</div>
       <h1 style={{ fontFamily: "Georgia, serif", fontSize: "clamp(2.5rem,7vw,5rem)", fontWeight: 900, color: "white", lineHeight: 1.05, marginBottom: 8 }}>Exam<span style={{ color: "#FFD700" }}>Edge</span> NG</h1>
       <p style={{ color: "rgba(255,215,0,0.65)", fontSize: "0.95rem", marginBottom: 12, letterSpacing: 2, fontWeight: 600 }}>THE AI ADVANTAGE</p>
-      <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.95rem", maxWidth: 500, lineHeight: 1.7, marginBottom: 48 }}>37 years of WAEC &amp; NECO past questions — deeply analyzed by AI for 95%+ prediction accuracy.</p>
+      <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.95rem", maxWidth: 500, lineHeight: 1.7, marginBottom: 48 }}>
+        Powered by Ariel AI — your intelligent companion from JSS1 all the way to SS3 and beyond.
+      </p>
       <div style={{ display: "flex", gap: 40, marginBottom: 52, flexWrap: "wrap", justifyContent: "center" }}>
-        {[["37","Years Analyzed"],["14","Subjects"],["95%+","Prediction Rate"],["A1","Your Target"]].map(([n,l]) => (
+        {[["JSS1–SS3","Full Coverage"],["14+","Subjects"],["95%+","Prediction Rate"],["A1","Your Target"]].map(([n,l]) => (
           <div key={l} style={{ textAlign: "center" }}>
             <div style={{ fontFamily: "Georgia, serif", fontSize: "2.2rem", fontWeight: 900, color: "#FFD700" }}>{n}</div>
             <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.82rem" }}>{l}</div>
@@ -663,16 +731,15 @@ export default function App() {
           {counts.pending > 0 && <div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: 12, padding: "14px 20px", marginBottom: 24, color: "#854d0e", fontWeight: 600 }}>🔔 {counts.pending} student{counts.pending > 1 ? "s" : ""} waiting for approval</div>}
           <div style={{ background: "white", borderRadius: 16, overflowX: "auto", boxShadow: "0 4px 24px rgba(0,132,61,0.08)", border: "1px solid #d1fae5" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
-              <thead><tr>{["Student","Email","Payment Ref","Date","Status","Actions"].map(h => <th key={h} style={{ background: "#001a0d", color: "#FFD700", padding: "14px 20px", textAlign: "left", fontSize: "0.82rem", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Student","Email","Class","Payment Ref","Status","Actions"].map(h => <th key={h} style={{ background: "#001a0d", color: "#FFD700", padding: "14px 20px", textAlign: "left", fontSize: "0.82rem", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>{h}</th>)}</tr></thead>
               <tbody>
-                {adminUsers.length === 0
-                  ? <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "#6b7280" }}>No users yet</td></tr>
-                  : adminUsers.map(u => (
+                {adminUsers.length === 0 ? <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "#6b7280" }}>No users yet</td></tr>
+                : adminUsers.map(u => (
                   <tr key={u.id} style={{ borderBottom: "1px solid #f0fdf4" }}>
                     <td style={{ padding: "14px 20px", fontWeight: 600 }}>{u.name}</td>
                     <td style={{ padding: "14px 20px", color: "#4b5563", fontSize: "0.85rem" }}>{u.email}</td>
+                    <td style={{ padding: "14px 20px" }}><span style={{ background: "#e6f4ec", color: "#001a0d", borderRadius: 999, padding: "3px 12px", fontSize: "0.8rem", fontWeight: 700 }}>{u.classLevel || "—"}</span></td>
                     <td style={{ padding: "14px 20px", fontFamily: "monospace", fontSize: "0.82rem" }}>{u.paymentRef || "—"}</td>
-                    <td style={{ padding: "14px 20px", color: "#6b7280", fontSize: "0.82rem" }}>{u.createdAt?.toDate?.()?.toLocaleDateString("en-GB") ?? "—"}</td>
                     <td style={{ padding: "14px 20px" }}>
                       <span style={{ borderRadius: 999, padding: "4px 14px", fontSize: "0.78rem", fontWeight: 600, background: u.status==="approved"?"#dcfce7":u.status==="pending"?"#fef9c3":"#fee2e2", color: u.status==="approved"?"#166534":u.status==="pending"?"#854d0e":"#991b1b" }}>
                         {u.status==="approved"?"✅ Approved":u.status==="pending"?"⏳ Pending":"❌ Rejected"}
@@ -699,6 +766,40 @@ export default function App() {
     );
   }
 
+  // ── Class Selection Screen ────────────────────────────────
+  if (screen === "selectClass") return (
+    <div style={{ minHeight: "100vh", background: "#F9F7F0" }}>
+      <Topbar />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 68px)", padding: "48px 24px", textAlign: "center" }}>
+        <img src="/logo.png" alt="" style={{ height: 72, width: 72, objectFit: "contain", marginBottom: 20 }} />
+        <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.9rem", color: "#001a0d", marginBottom: 10 }}>
+          {showPromote ? "🎉 Congratulations on Your Promotion!" : `Welcome, ${user?.displayName?.split(" ")[0]}! 🎉`}
+        </h2>
+        <p style={{ color: "#6b7280", maxWidth: 440, lineHeight: 1.7, marginBottom: 10 }}>
+          {showPromote
+            ? `You are moving up! Select your new class and Ariel AI will adjust everything to match your new level.`
+            : "Your access has been approved! Tell Ariel AI what class you are in so it can give you the most relevant help, subjects, and study support."}
+        </p>
+        {showPromote && classLevel && (
+          <div style={{ background: "#e6f4ec", border: "1px solid #d1fae5", borderRadius: 10, padding: "8px 20px", color: "#001a0d", fontWeight: 600, marginBottom: 16, fontSize: "0.88rem" }}>
+            Moving from <strong>{classLevel}</strong> → Select your new class below
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, width: "100%", maxWidth: 500, marginBottom: 20 }}>
+          {CLASS_LEVELS.map(c => (
+            <button key={c.level} onClick={() => saveClassLevel(c.level)}
+              style={{ background: "white", border: `2px solid ${c.color}`, borderRadius: 16, padding: "20px 12px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, transition: "all 0.2s", boxShadow: "0 4px 16px rgba(0,0,0,0.06)", opacity: showPromote && c.level === classLevel ? 0.4 : 1 }}>
+              <span style={{ fontFamily: "Georgia, serif", fontSize: "1.6rem", fontWeight: 900, color: c.color }}>{c.label}</span>
+              <span style={{ fontSize: "0.72rem", color: "#6b7280", lineHeight: 1.3, textAlign: "center" }}>{c.sub}</span>
+            </button>
+          ))}
+        </div>
+        {showPromote && <button onClick={() => setShowPromote(false)} style={{ background: "transparent", border: "1.5px solid #d1fae5", color: "#6b7280", borderRadius: 10, padding: "8px 20px", fontSize: "0.85rem", cursor: "pointer" }}>← Cancel, stay in {classLevel}</button>}
+        <p style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: 12 }}>You can always update your class level from your dashboard</p>
+      </div>
+    </div>
+  );
+
   if (screen === "generating") return (
     <div style={{ position: "fixed", inset: 0, background: "linear-gradient(135deg,#001a0d,#003d1f)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 999, textAlign: "center", padding: 24 }}>
       <img src="/logo.png" alt="" style={{ height: 80, width: 80, objectFit: "contain", marginBottom: 24, animation: "spin 3s linear infinite" }} />
@@ -710,7 +811,7 @@ export default function App() {
       <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 360 }}>
         {LOADING_STEPS.map((step, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "0.85rem", color: loadingStep > i ? "#4ade80" : loadingStep === i ? "#FFD700" : "rgba(255,255,255,0.25)", fontWeight: loadingStep === i ? 600 : 400, transition: "color 0.4s" }}>
-            <span style={{ width: 20, height: 20, borderRadius: "50%", background: loadingStep > i ? "#4ade80" : loadingStep === i ? "#FFD700" : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", flexShrink: 0, color: loadingStep > i ? "#001a0d" : loadingStep === i ? "#001a0d" : "transparent" }}>
+            <span style={{ width: 20, height: 20, borderRadius: "50%", background: loadingStep > i ? "#4ade80" : loadingStep === i ? "#FFD700" : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", flexShrink: 0, color: "#001a0d" }}>
               {loadingStep > i ? "✓" : loadingStep === i ? "●" : ""}
             </span>
             {step}
@@ -762,20 +863,62 @@ export default function App() {
     );
   }
 
-  // Dashboard
+  // ── STUDENT DASHBOARD ─────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: "#F9F7F0" }}>
       <Topbar />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
+
+        {/* Welcome Banner */}
         <div style={{ background: "linear-gradient(135deg,#001a0d,#003d1f)", borderRadius: 20, padding: "34px 38px", color: "white", marginBottom: 28, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 20 }}>
           <div>
-            <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.8rem", marginBottom: 6 }}>Welcome, {user?.displayName?.split(" ")[0]}! 👋</h2>
-            <p style={{ color: "rgba(255,255,255,0.6)" }}>Select a subject to generate your AI-powered exam compendium.</p>
-            {adminRefs.length > 0 && <p style={{ color: "#86efac", fontSize: "0.82rem", marginTop: 6 }}>🔗 {adminRefs.length} admin reference{adminRefs.length > 1 ? "s" : ""} active — AI accuracy boosted</p>}
+            <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.8rem", marginBottom: 6 }}>
+              Welcome, {user?.displayName?.split(" ")[0]}! 👋
+            </h2>
+            <p style={{ color: "rgba(255,255,255,0.6)" }}>
+              {isSS3
+                ? "Generate your AI-powered WAEC & NECO exam compendium below."
+                : classLevel
+                ? `Your ${classLevel} after-school study companion is ready. Ask Ariel AI anything!`
+                : "Select a subject to get started."}
+            </p>
+            {adminRefs.length > 0 && <p style={{ color: "#86efac", fontSize: "0.82rem", marginTop: 6 }}>🔗 {adminRefs.length} admin reference{adminRefs.length > 1 ? "s" : ""} active</p>}
           </div>
-          <div style={{ background: "#FFD700", color: "#001a0d", borderRadius: 999, padding: "8px 22px", fontWeight: 700, fontSize: "0.85rem" }}>✅ Access Approved</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+            <div style={{ background: "#FFD700", color: "#001a0d", borderRadius: 999, padding: "8px 22px", fontWeight: 700, fontSize: "0.85rem" }}>✅ Access Approved</div>
+            {classLevel && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ background: "rgba(255,215,0,0.12)", border: "1px solid rgba(255,215,0,0.3)", color: "#FFD700", borderRadius: 999, padding: "5px 16px", fontSize: "0.8rem", fontWeight: 700 }}>
+                  🎓 {classLevel}
+                </div>
+                {nextClass && (
+                  <button onClick={() => setShowPromote(true) || setScreen("selectClass")}
+                    style={{ background: "linear-gradient(135deg,#FFD700,#f59e0b)", color: "#001a0d", border: "none", borderRadius: 999, padding: "5px 14px", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer", letterSpacing: 0.5 }}>
+                    🚀 GET PROMOTED
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Ariel AI Companion Banner (for non-SS3) */}
+        {!isSS3 && (
+          <div style={{ background: "white", border: "1.5px solid #d1fae5", borderRadius: 16, padding: "20px 24px", marginBottom: 28, display: "flex", alignItems: "center", gap: 16, boxShadow: "0 4px 20px rgba(0,132,61,0.06)", flexWrap: "wrap" }}>
+            <div style={{ width: 52, height: 52, background: "linear-gradient(135deg,#001a0d,#00843D)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <BotIcon size={28} color="#FFD700" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontWeight: 700, color: "#001a0d", marginBottom: 4 }}>Ariel AI is your personal after-school tutor 🎓</p>
+              <p style={{ color: "#6b7280", fontSize: "0.85rem" }}>Ask anything — homework help, topic explanations, past question solving. Upload a photo or PDF and Ariel will explain it for you.</p>
+            </div>
+            <button onClick={() => setChatOpen(true)} style={{ background: "linear-gradient(135deg,#00843D,#005a29)", color: "white", border: "none", borderRadius: 12, padding: "12px 24px", fontSize: "0.88rem", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+              Chat with Ariel AI →
+            </button>
+          </div>
+        )}
+
+        {/* Active references */}
         {refs.referenceUrls.filter(u => u).length > 0 || refs.pdfBase64 ? (
           <div style={{ background: "#e6f4ec", border: "1px solid #d1fae5", borderRadius: 10, padding: "10px 16px", marginBottom: 20, fontSize: "0.85rem", color: "#001a0d", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontWeight: 700 }}>📎 Your active references:</span>
@@ -786,24 +929,39 @@ export default function App() {
 
         {genError && <div style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 10, padding: "12px 20px", marginBottom: 24, fontWeight: 600 }}>{genError}</div>}
 
-        <p style={{ fontSize: "0.78rem", fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#00843D", marginBottom: 18 }}>📚 Choose a Subject</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 18, marginBottom: 48 }}>
-          {SUBJECTS.map(sub => (
-            <div key={sub.id} style={{ background: "white", border: "1.5px solid #d1fae5", borderRadius: 16, padding: "24px 20px", display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 4px 20px rgba(0,132,61,0.06)", transition: "transform 0.2s, box-shadow 0.2s" }}
+        {/* Subjects */}
+        <p style={{ fontSize: "0.78rem", fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#00843D", marginBottom: 18 }}>
+          📚 {classLevel} Subjects
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px,1fr))", gap: 16, marginBottom: 48 }}>
+          {subjects.map(sub => (
+            <div key={sub.id} style={{ background: "white", border: "1.5px solid #d1fae5", borderRadius: 16, padding: "22px 18px", display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 4px 20px rgba(0,132,61,0.06)", transition: "transform 0.2s, box-shadow 0.2s" }}
               onMouseOver={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 32px rgba(0,132,61,0.14)"; }}
               onMouseOut={e  => { e.currentTarget.style.transform = "translateY(0)";   e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,132,61,0.06)"; }}>
-              <div style={{ fontSize: "2.2rem" }}>{sub.icon}</div>
+              <div style={{ fontSize: "2rem" }}>{sub.icon}</div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: "0.93rem" }}>{sub.name}</div>
-                <div style={{ fontSize: "0.77rem", color: "#6b7280" }}>1988–2025 • WAEC &amp; NECO</div>
+                <div style={{ fontSize: "0.77rem", color: "#6b7280" }}>{classLevel} • Nigerian Curriculum</div>
               </div>
-              <button style={{ background: "linear-gradient(135deg,#00843D,#005a29)", color: "white", border: "none", borderRadius: 10, padding: "10px 0", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", width: "100%" }} onClick={() => generateCompendium(sub)}>
-                ✨ Generate Compendium
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* Ask Ariel about this subject */}
+                <button style={{ background: "#f0fdf4", color: "#00843D", border: "1.5px solid #d1fae5", borderRadius: 10, padding: "8px 0", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", width: "100%" }}
+                  onClick={() => { setSelectedSubject(sub); setChatOpen(true); }}>
+                  🤖 Ask Ariel AI
+                </button>
+                {/* Generate compendium — SS3 only or senior */}
+                {(isSS3 || !isJunior) && (
+                  <button style={{ background: "linear-gradient(135deg,#00843D,#005a29)", color: "white", border: "none", borderRadius: 10, padding: "8px 0", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", width: "100%" }}
+                    onClick={() => generateCompendium(sub)}>
+                    ✨ {isSS3 ? "Generate Compendium" : "Study Guide"}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
 
+        {/* Previously generated */}
         {history.length > 0 && <>
           <div style={{ height: 1, background: "#d1fae5", margin: "32px 0" }} />
           <p style={{ fontSize: "0.78rem", fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#00843D", marginBottom: 18 }}>🕓 Previously Generated</p>
