@@ -788,9 +788,9 @@ export default function App() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, width: "100%", maxWidth: 500, marginBottom: 20 }}>
           {CLASS_LEVELS.map(c => (
             <button key={c.level} onClick={() => saveClassLevel(c.level)}
-              style={{ background: "white", border: `2px solid ${c.color}`, borderRadius: 16, padding: "20px 12px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, transition: "all 0.2s", boxShadow: "0 4px 16px rgba(0,0,0,0.06)", opacity: showPromote && c.level === classLevel ? 0.4 : 1 }}>
-              <span style={{ fontFamily: "Georgia, serif", fontSize: "1.6rem", fontWeight: 900, color: c.color }}>{c.label}</span>
-              <span style={{ fontSize: "0.72rem", color: "#6b7280", lineHeight: 1.3, textAlign: "center" }}>{c.sub}</span>
+              style={{ background: c.color, border: "none", borderRadius: 16, padding: "22px 12px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", opacity: showPromote && c.level === classLevel ? 0.3 : 1, fontFamily: "sans-serif" }}>
+              <span style={{ fontFamily: "Georgia, serif", fontSize: "1.6rem", fontWeight: 900, color: "white" }}>{c.label}</span>
+              <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.85)", lineHeight: 1.3, textAlign: "center" }}>{c.sub}</span>
             </button>
           ))}
         </div>

@@ -19,7 +19,7 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == uid;
       allow update: if request.auth != null
                     && request.auth.uid == uid
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paymentRef", "classLevel"]);
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paymentRef", "classLevel", "updatedAt"]);
       allow update: if isAdmin();
       allow delete: if false;
     }
