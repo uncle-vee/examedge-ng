@@ -3,11 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isAdmin() {
-      return request.auth != null &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      return request.auth != null && (
+        request.auth.token.email == "Veekthormichael@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true)
+      );
     }
+
     function isApproved() {
       return request.auth != null &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "approved";
     }
 
@@ -18,7 +23,9 @@ service cloud.firestore {
       allow update: if request.auth != null
                     && request.auth.uid == uid
                     && request.resource.data.diff(resource.data).affectedKeys()
-                       .hasOnly(["paymentRef","classLevel","updatedAt","status","subscriptionTier","trialStarted","subscriptionExpiry"]);
+                       .hasOnly(["paymentRef","classLevel","updatedAt","status",
+                                 "subscriptionTier","trialStarted","subscriptionExpiry",
+                                 "accessCode","bankTransferTier"]);
       allow update: if isAdmin();
       allow delete: if false;
     }

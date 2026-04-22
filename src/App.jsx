@@ -437,15 +437,28 @@ function AdminCodeGenerator() {
     try {
       const newCodes = [];
       for (let i = 0; i < count; i++) {
-        const prefix = tier === "junior" ? "JNR" : "SNR";
-        const random = Math.random().toString(36).substring(2, 10).toUpperCase();
-        const code   = `${prefix}-${random}`;
-        await addDoc(collection(db, "accessCodes"), { code, tier, plan: "term", used: false, email, createdAt: serverTimestamp(), createdBy: "admin" });
+        const prefix  = tier === "junior" ? "JNR" : "SNR";
+        const chars   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const random  = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+        const code    = `${prefix}-${random}`;
+        const docData = {
+          code,
+          tier,
+          plan:      "term",
+          used:      false,
+          email:     email || "",
+          createdAt: serverTimestamp(),
+          createdBy: "admin",
+        };
+        await addDoc(collection(db, "accessCodes"), docData);
         newCodes.push(code);
       }
       setCodes(newCodes);
       await loadCodes();
-    } catch (e) { alert("Failed to generate codes."); }
+    } catch (e) {
+      console.error("Generate codes error:", e);
+      alert(`Failed to generate codes: ${e.message}\n\nMake sure you are signed in as admin and the Firestore rules have been updated in Firebase Console.`);
+    }
     setLoading(false);
   };
 
