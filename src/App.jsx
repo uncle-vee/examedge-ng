@@ -40,9 +40,9 @@ const PLANS = {
 };
 
 const BANK_DETAILS = {
-  name:    "UPDATE_ACCOUNT_NAME",
-  bank:    "UPDATE_BANK_NAME",
-  account: "UPDATE_ACCOUNT_NUMBER",
+  name:    "Chinaemeze Victor Ngeleh",
+  bank:    "Moniepoint",
+  account: "8146746092",
 };
 
 // ── Class levels ──────────────────────────────────────────────
