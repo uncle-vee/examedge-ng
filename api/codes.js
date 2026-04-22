@@ -1,117 +1,72 @@
 // ============================================================
-//  api/codes.js — Access Code Generation and Validation
-//  Handles: generate codes, validate codes, Paystack webhook
+//  api/codes.js — Access Code Validation via REST API
+//  Uses Firestore REST API to avoid SDK import issues
 // ============================================================
 
-const crypto = require("crypto");
-
-// ── Generate a unique access code ────────────────────────────
-function generateCode(tier) {
-  const prefix  = tier === "junior" ? "JNR" : "SNR";
-  const random  = crypto.randomBytes(4).toString("hex").toUpperCase();
-  return `${prefix}-${random}`;
-}
-
 module.exports = async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // ── POST /api/codes — validate or generate a code ────────
-  if (req.method === "POST") {
-    const { action, code, tier, email, adminKey } = req.body;
+  const { action, code, email } = req.body;
 
-    // ── ACTION: validate a code ──────────────────────────────
-    if (action === "validate") {
-      if (!code) return res.status(400).json({ error: "Code is required" });
+  if (action !== "validate") return res.status(400).json({ error: "Invalid action" });
+  if (!code) return res.status(400).json({ valid: false, error: "Please enter an access code." });
 
-      const { initializeApp, getApps } = require("firebase/app");
-      const { getFirestore, collection, query, where, getDocs, updateDoc, doc } = require("firebase/firestore");
+  const projectId = process.env.REACT_APP_FIREBASE_PROJECT_ID;
+  const apiKey    = process.env.REACT_APP_FIREBASE_API_KEY;
 
-      const firebaseConfig = {
-        apiKey:            process.env.REACT_APP_FIREBASE_API_KEY,
-        authDomain:        process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-        projectId:         process.env.REACT_APP_FIREBASE_PROJECT_ID,
-        storageBucket:     process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-        appId:             process.env.REACT_APP_FIREBASE_APP_ID,
-      };
+  try {
+    // ── Query Firestore REST API for the code ──────────────
+    const queryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery?key=${apiKey}`;
 
-      const firebaseApp = getApps().length === 0
-        ? initializeApp(firebaseConfig)
-        : getApps()[0];
-      const db = getFirestore(firebaseApp);
+    const queryBody = {
+      structuredQuery: {
+        from: [{ collectionId: "accessCodes" }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: "code" },
+            op: "EQUAL",
+            value: { stringValue: code.trim().toUpperCase() },
+          },
+        },
+        limit: 1,
+      },
+    };
 
-      try {
-        const q    = query(collection(db, "accessCodes"), where("code", "==", code.trim().toUpperCase()));
-        const snap = await getDocs(q);
+    const queryRes  = await fetch(queryUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(queryBody) });
+    const queryData = await queryRes.json();
 
-        if (snap.empty) return res.status(404).json({ valid: false, error: "Invalid code. Please check and try again." });
-
-        const codeDoc  = snap.docs[0];
-        const codeData = codeDoc.data();
-
-        if (codeData.used) return res.status(400).json({ valid: false, error: "This code has already been used." });
-        if (codeData.expiresAt && codeData.expiresAt.toDate() < new Date()) return res.status(400).json({ valid: false, error: "This code has expired." });
-
-        // Mark code as used
-        await updateDoc(doc(db, "accessCodes", codeDoc.id), {
-          used:     true,
-          usedAt:   new Date(),
-          usedBy:   email || "unknown",
-        });
-
-        return res.status(200).json({
-          valid:  true,
-          tier:   codeData.tier,
-          plan:   codeData.plan || "term",
-        });
-      } catch (err) {
-        console.error("Validate code error:", err);
-        return res.status(500).json({ error: "Server error" });
-      }
+    // Check if document was found
+    if (!queryData || !queryData[0] || !queryData[0].document) {
+      return res.status(404).json({ valid: false, error: "Invalid code. Please check and try again." });
     }
 
-    // ── ACTION: generate codes (admin only) ──────────────────
-    if (action === "generate") {
-      if (adminKey !== process.env.ADMIN_SECRET_KEY) {
-        return res.status(403).json({ error: "Unauthorized" });
-      }
+    const docData   = queryData[0].document;
+    const docName   = docData.name;
+    const fields    = docData.fields;
 
-      const { initializeApp, getApps } = require("firebase/app");
-      const { getFirestore, collection, addDoc, serverTimestamp } = require("firebase/firestore");
+    const isUsed    = fields.used?.booleanValue === true;
+    const tier      = fields.tier?.stringValue || "junior";
 
-      const firebaseConfig = {
-        apiKey:            process.env.REACT_APP_FIREBASE_API_KEY,
-        authDomain:        process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-        projectId:         process.env.REACT_APP_FIREBASE_PROJECT_ID,
-        storageBucket:     process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-        appId:             process.env.REACT_APP_FIREBASE_APP_ID,
-      };
-
-      const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-      const db = getFirestore(firebaseApp);
-
-      const count    = parseInt(req.body.count || "1");
-      const newCodes = [];
-
-      for (let i = 0; i < Math.min(count, 50); i++) {
-        const newCode = generateCode(tier);
-        await addDoc(collection(db, "accessCodes"), {
-          code:      newCode,
-          tier:      tier || "junior",
-          plan:      "term",
-          used:      false,
-          createdAt: serverTimestamp(),
-          createdBy: "admin",
-          email:     email || "",
-        });
-        newCodes.push(newCode);
-      }
-
-      return res.status(200).json({ codes: newCodes });
+    if (isUsed) {
+      return res.status(400).json({ valid: false, error: "This code has already been used. Please contact the administrator." });
     }
 
-    return res.status(400).json({ error: "Invalid action" });
+    // ── Mark code as used via REST API ─────────────────────
+    const updateUrl  = `https://firestore.googleapis.com/v1/${docName}?updateMask.fieldPaths=used&updateMask.fieldPaths=usedAt&updateMask.fieldPaths=usedBy&key=${apiKey}`;
+    const updateBody = {
+      fields: {
+        used:   { booleanValue: true },
+        usedAt: { stringValue: new Date().toISOString() },
+        usedBy: { stringValue: email || "unknown" },
+      },
+    };
+
+    await fetch(updateUrl, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updateBody) });
+
+    return res.status(200).json({ valid: true, tier });
+
+  } catch (err) {
+    console.error("Code validation error:", err.message);
+    return res.status(500).json({ valid: false, error: "Server error. Please try again." });
   }
-
-  return res.status(405).json({ error: "Method not allowed" });
 };
