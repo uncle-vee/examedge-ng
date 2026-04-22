@@ -1,11 +1,9 @@
 {
   "version": 2,
   "functions": {
-    "api/generate.js": {
-      "maxDuration": 60
-    },
-    "api/chat.js": {
-      "maxDuration": 30
-    }
+    "api/generate.js":          { "maxDuration": 60 },
+    "api/chat.js":              { "maxDuration": 30 },
+    "api/codes.js":             { "maxDuration": 15 },
+    "api/paystack-webhook.js":  { "maxDuration": 15 }
   }
 }

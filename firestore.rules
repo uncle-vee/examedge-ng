@@ -1,5 +1,4 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -7,7 +6,6 @@ service cloud.firestore {
       return request.auth != null &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
-
     function isApproved() {
       return request.auth != null &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "approved";
@@ -19,7 +17,8 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == uid;
       allow update: if request.auth != null
                     && request.auth.uid == uid
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paymentRef", "classLevel", "updatedAt"]);
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(["paymentRef","classLevel","updatedAt","status","subscriptionTier","trialStarted","subscriptionExpiry"]);
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -35,6 +34,13 @@ service cloud.firestore {
       allow read: if request.auth != null && isApproved();
       allow read: if isAdmin();
       allow create, update, delete: if isAdmin();
+    }
+
+    match /accessCodes/{docId} {
+      allow read: if request.auth != null;
+      allow create: if isAdmin();
+      allow update: if request.auth != null;
+      allow delete: if isAdmin();
     }
   }
 }

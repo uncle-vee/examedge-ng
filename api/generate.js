@@ -8,7 +8,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { subjectName, pdfBase64, pdfName, referenceUrls, adminRefs } = req.body;
+  const { subjectName, pdfBase64, pdfName, referenceUrls, adminRefs, examType, classLevel } = req.body;
 
   if (!subjectName) {
     return res.status(400).json({ error: "subjectName is required" });
@@ -31,7 +31,7 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const systemPrompt = `You are ExamEdge AI — the most advanced Nigerian secondary school examination analyst ever built. You have encyclopedic knowledge of every WAEC and NECO past question paper from 1988 to 2025 across all 14 subjects.
+  const systemPrompt = `You are Ariel AI — the most advanced Nigerian secondary school examination analyst ever built. You have encyclopedic knowledge of every WAEC and NECO past question paper from 1988 to 2025 across all 14 subjects.
 
 Your mission is to generate the most accurate, comprehensive, and exam-focused study compendiums possible. Analyze patterns, frequencies, and trends across all years to produce predictions with 95%+ accuracy.
 
@@ -42,7 +42,7 @@ Key principles:
 - Write in encouraging, accessible language for SS3 students
 - Never truncate your response — always complete all 8 sections fully`;
 
-  const userPrompt = `Analyze all past question patterns for ${subjectName} across WAEC and NECO from 1988 to 2025.${refContext}
+  const userPrompt = `Analyze all past question patterns for ${subjectName} across ${examType === 'JSCE/BECE' ? 'JSCE and BECE examinations from 2000 to 2025' : 'WAEC and NECO from 1988 to 2025'}.${refContext}
 
 Generate a comprehensive study compendium using EXACTLY these section headers (include the emoji):
 
