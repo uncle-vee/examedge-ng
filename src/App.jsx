@@ -40,9 +40,9 @@ const PLANS = {
 };
 
 const BANK_DETAILS = {
-  name:    "UncleVictor ExamEdge",
-  bank:    "Your Bank Name",
-  account: "0000000000",
+  name:    "UPDATE_ACCOUNT_NAME",
+  bank:    "UPDATE_BANK_NAME",
+  account: "UPDATE_ACCOUNT_NUMBER",
 };
 
 // ── Class levels ──────────────────────────────────────────────
@@ -714,17 +714,17 @@ export default function App() {
 
     // Check subscription or trial
     if (record.subscriptionTier && record.subscriptionTier !== "trial") {
-      // Has valid subscription
-      if (!record.classLevel) setScreen("selectClass");
+      if (!record.classLevel) { setChatOpen(false); setScreen("selectClass"); }
       else setScreen("dashboard");
       return;
     }
     if (record.subscriptionTier === "trial" && isTrialActive(record.trialStarted)) {
-      if (!record.classLevel) setScreen("selectClass");
+      if (!record.classLevel) { setChatOpen(false); setScreen("selectClass"); }
       else setScreen("dashboard");
       return;
     }
     // No valid subscription
+    setChatOpen(false);
     setScreen("subscribe");
   };
 
@@ -743,15 +743,15 @@ export default function App() {
   const updateStatus  = async (uid, status) => { await updateDoc(doc(db, "users", uid), { status, updatedAt: serverTimestamp() }); };
 
   const saveClassLevel = async (level) => {
-    // Check tier permission
     const classInfo = CLASS_LEVELS.find(c => c.level === level);
     const subTier   = userRecord?.subscriptionTier;
-    if (subTier !== "trial" && subTier && subTier !== classInfo?.tier) {
+    if (subTier && subTier !== "trial" && subTier !== classInfo?.tier) {
       alert(`Your subscription covers the ${subTier} category only. Please subscribe to the ${classInfo?.tier} category to access ${level}.`);
       return;
     }
     setClassLevel(level);
     if (user) await updateDoc(doc(db, "users", user.uid), { classLevel: level, updatedAt: serverTimestamp() });
+    setChatOpen(false);
     setScreen("dashboard");
   };
 
@@ -825,7 +825,9 @@ export default function App() {
     </div>
   );
 
-  const FloatingButtons = () => (
+  const FloatingButtons = ({ show = true }) => {
+    if (!show) return null;
+    return (
     <>
       <div style={{ position: "fixed", bottom: 96, right: 24, zIndex: 998 }}>
         <ReferenceManager onRefsChange={setRefs} />
@@ -835,7 +837,8 @@ export default function App() {
       </button>
       {chatOpen && <Chatbot subject={selectedSubject} classLevel={classLevel} onClose={() => setChatOpen(false)} />}
     </>
-  );
+    );
+  };
 
   // ── SCREENS ───────────────────────────────────────────────
 
